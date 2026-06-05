@@ -37,6 +37,12 @@ class FakeRedis:
     async def delete(self, key: str):
         self.store.pop(key, None)
 
+    async def delete_pattern(self, pattern: str):
+        prefix = pattern.removesuffix("*")
+        for key in list(self.store):
+            if key.startswith(prefix):
+                self.store.pop(key, None)
+
     async def exists(self, key: str) -> bool:
         return key in self.store
 

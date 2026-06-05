@@ -230,6 +230,34 @@ async def test_todo_list_cache_is_isolated_by_page_and_size(client: AsyncClient)
 
 
 @pytest.mark.asyncio
+async def test_todos_are_listed_newest_first(client: AsyncClient):
+    """Test todo list ordering is stable for pagination."""
+    token = await get_auth_token(client, "ordering@example.com")
+
+    await client.post(
+        "/api/v1/todos",
+        json={"title": "Older Todo"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    await client.post(
+        "/api/v1/todos",
+        json={"title": "Newer Todo"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = await client.get(
+        "/api/v1/todos",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert [todo["title"] for todo in response.json()["items"]] == [
+        "Newer Todo",
+        "Older Todo",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_todo_list_cache_invalidates_after_create(client: AsyncClient):
     """Test creating a todo invalidates cached lists for that user."""
     token = await get_auth_token(client, "cache-create@example.com")

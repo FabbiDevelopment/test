@@ -23,6 +23,23 @@ async def test_register_success(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_register_duplicate_email(client: AsyncClient):
+    """Test duplicate email registration is rejected."""
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "duplicate@example.com", "password": "password123"},
+    )
+
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "duplicate@example.com", "password": "password123"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Email already registered"
+
+
+@pytest.mark.asyncio
 async def test_login_success(client: AsyncClient):
     """Test successful login after registration."""
     # Register first

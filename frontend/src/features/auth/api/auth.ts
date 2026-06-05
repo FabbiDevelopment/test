@@ -1,5 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
+
+export const currentUserQueryKey = ["currentUser"] as const;
+const todosQueryKey = ["todos"] as const;
 
 interface LoginRequest {
   email: string;
@@ -17,6 +21,20 @@ interface TokenResponse {
   token_type: string;
 }
 
+export function clearAuthSession() {
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+  queryClient.removeQueries({ queryKey: currentUserQueryKey });
+  queryClient.removeQueries({ queryKey: todosQueryKey });
+}
+
+function storeAuthSession(data: TokenResponse) {
+  localStorage.setItem("access_token", data.access_token);
+  localStorage.setItem("refresh_token", data.refresh_token);
+  queryClient.removeQueries({ queryKey: todosQueryKey });
+  queryClient.invalidateQueries({ queryKey: currentUserQueryKey });
+}
+
 export function useLogin() {
   return useMutation({
     mutationFn: async (data: LoginRequest): Promise<TokenResponse> => {
@@ -24,8 +42,7 @@ export function useLogin() {
       return response.data;
     },
     onSuccess: (data) => {
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("refresh_token", data.refresh_token);
+      storeAuthSession(data);
     },
   });
 }
@@ -37,8 +54,7 @@ export function useRegister() {
       return response.data;
     },
     onSuccess: (data) => {
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("refresh_token", data.refresh_token);
+      storeAuthSession(data);
     },
   });
 }
@@ -52,8 +68,7 @@ export function useLogout() {
       });
     },
     onSuccess: () => {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
+      clearAuthSession();
     },
   });
 }

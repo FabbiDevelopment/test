@@ -3,6 +3,12 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
 
+const todosQueryKey = ["todos"] as const;
+const todoListQueryKey = (page: number, size: number) => [
+  ...todosQueryKey,
+  { page, size },
+] as const;
+
 export interface Todo {
   id: string;
   title: string;
@@ -34,7 +40,7 @@ interface UpdateTodoRequest {
 
 export function useTodos(page: number = 1, size: number = 10000) {
   return useQuery({
-    queryKey: ["todos"],
+    queryKey: todoListQueryKey(page, size),
     queryFn: async (): Promise<TodoListResponse> => {
       const response = await api.get("/todos", {
         params: { page, size },
@@ -51,7 +57,7 @@ export function useCreateTodo() {
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      queryClient.invalidateQueries({ queryKey: todosQueryKey });
       toast.success("Todo created successfully!");
     },
     onError: () => {
@@ -74,29 +80,38 @@ export function useUpdateTodo() {
       return response.data;
     },
     onMutate: async ({ id, data }) => {
-      // Cancel outgoing queries
-      await queryClient.cancelQueries({ queryKey: ["todos"] });
+      await queryClient.cancelQueries({ queryKey: todosQueryKey });
 
-      // Snapshot previous value
-      const previousTodos = queryClient.getQueryData<TodoListResponse>(["todos"]);
+      const previousTodos = queryClient.getQueriesData<TodoListResponse>({
+        queryKey: todosQueryKey,
+      });
 
-      // Optimistically update
-      if (previousTodos) {
-        queryClient.setQueryData<TodoListResponse>(["todos"], {
-          ...previousTodos,
-          items: previousTodos.items.map((todo) =>
-            todo.id === id ? { ...todo, ...data } : todo
-          ),
-        });
-      }
+      queryClient.setQueriesData<TodoListResponse>(
+        { queryKey: todosQueryKey },
+        (oldTodos) => {
+          if (!oldTodos) {
+            return oldTodos;
+          }
+
+          return {
+            ...oldTodos,
+            items: oldTodos.items.map((todo) =>
+              todo.id === id ? { ...todo, ...data } : todo
+            ),
+          };
+        }
+      );
 
       return { previousTodos };
     },
-    onError: () => {
+    onError: (_error, _variables, context) => {
+      context?.previousTodos.forEach(([queryKey, data]) => {
+        queryClient.setQueryData(queryKey, data);
+      });
       toast.error("Failed to update todo");
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      queryClient.invalidateQueries({ queryKey: todosQueryKey });
     },
   });
 }
@@ -107,7 +122,7 @@ export function useDeleteTodo() {
       await api.delete(`/todos/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      queryClient.invalidateQueries({ queryKey: todosQueryKey });
       toast.success("Todo deleted successfully!");
     },
     onError: () => {

@@ -1,20 +1,52 @@
+import uuid
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_redis
+from app.api.deps import (
+    get_current_token_payload,
+    get_current_user,
+    get_redis,
+    get_token_blacklist_key,
+)
 from app.core.redis import RedisClient
-from app.core.security import create_access_token, create_refresh_token, verify_token
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    verify_password,
+    verify_token,
+)
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import (
+    LogoutRequest,
     RefreshTokenRequest,
     TokenResponse,
     UserCreate,
     UserResponse,
 )
-from app.services.auth_service import create_user, get_user_by_email
+from app.services.auth_service import create_user, get_user_by_email, get_user_by_id
 
 router = APIRouter()
+
+
+def get_token_ttl_seconds(payload: dict) -> int:
+    exp = payload.get("exp")
+    if exp is None:
+        return 0
+    expires_at = datetime.fromtimestamp(int(exp), tz=timezone.utc)
+    return max(int((expires_at - datetime.now(timezone.utc)).total_seconds()), 0)
+
+
+async def revoke_token(redis: RedisClient, payload: dict) -> None:
+    jti = payload.get("jti")
+    if not jti:
+        return
+
+    ttl_seconds = get_token_ttl_seconds(payload)
+    if ttl_seconds > 0:
+        await redis.set(get_token_blacklist_key(jti), "1", ex=ttl_seconds)
 
 
 @router.post(
@@ -53,16 +85,14 @@ async def login(
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User with this email not found",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
         )
-
-    from app.core.security import verify_password
 
     if not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password",
+            detail="Invalid email or password",
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
@@ -90,8 +120,37 @@ async def refresh_token(
         )
 
     user_id = payload.get("sub")
+    jti = payload.get("jti")
+    if user_id is None or jti is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+
+    if await redis.exists(get_token_blacklist_key(jti)):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has been revoked",
+        )
+
+    user = await get_user_by_id(db, user_uuid)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+
     access_token = create_access_token(data={"sub": user_id})
     refresh_token = create_refresh_token(data={"sub": user_id})
+    await revoke_token(redis, payload)
 
     return TokenResponse(
         access_token=access_token,
@@ -101,9 +160,38 @@ async def refresh_token(
 
 @router.post("/logout")
 async def logout(
+    request: LogoutRequest | None = None,
+    token_payload: dict = Depends(get_current_token_payload),
     current_user: User = Depends(get_current_user),
+    redis: RedisClient = Depends(get_redis),
 ):
     """Logout user."""
+    refresh_payload = None
+    if request and request.refresh_token:
+        refresh_payload = verify_token(request.refresh_token)
+        if refresh_payload is None or refresh_payload.get("type") != "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token",
+            )
+
+        refresh_jti = refresh_payload.get("jti")
+        if not refresh_jti or refresh_payload.get("sub") != str(current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token",
+            )
+
+        if await redis.exists(get_token_blacklist_key(refresh_jti)):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token has been revoked",
+            )
+
+    await revoke_token(redis, token_payload)
+    if refresh_payload:
+        await revoke_token(redis, refresh_payload)
+
     return {"message": "Successfully logged out"}
 
 

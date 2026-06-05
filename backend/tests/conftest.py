@@ -1,7 +1,6 @@
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -11,11 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
-from app.api.deps import get_redis
-from app.core.security import create_access_token
-from app.db.base import Base
-from app.db.session import get_db
-from app.main import app
+from app.api.deps import get_redis  # noqa: E402
+from app.core.security import create_access_token  # noqa: E402
+from app.db.base import Base  # noqa: E402
+from app.db.session import get_db  # noqa: E402
+from app.main import app  # noqa: E402
 
 test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 test_session_maker = async_sessionmaker(
@@ -23,6 +22,29 @@ test_session_maker = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+
+class FakeRedis:
+    def __init__(self):
+        self.store: dict[str, str] = {}
+
+    async def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
+    async def set(self, key: str, value: str, ex: int | None = None):
+        self.store[key] = value
+
+    async def delete(self, key: str):
+        self.store.pop(key, None)
+
+    async def exists(self, key: str) -> bool:
+        return key in self.store
+
+    def clear(self):
+        self.store.clear()
+
+
+fake_redis = FakeRedis()
 
 
 @pytest.fixture(scope="session")
@@ -34,6 +56,7 @@ def event_loop():
 
 @pytest.fixture(autouse=True)
 async def setup_db():
+    fake_redis.clear()
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -52,11 +75,7 @@ async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 def override_get_redis():
-    mock_redis = MagicMock()
-    mock_redis.get = AsyncMock(return_value=None)
-    mock_redis.set = AsyncMock()
-    mock_redis.delete = AsyncMock()
-    return mock_redis
+    return fake_redis
 
 
 app.dependency_overrides[get_db] = override_get_db

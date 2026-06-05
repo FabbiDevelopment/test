@@ -11,12 +11,21 @@ from app.models.user import User
 from app.services.auth_service import get_user_by_id
 
 security_scheme = HTTPBearer()
+TOKEN_BLACKLIST_PREFIX = "token:blacklist:"
 
 
-async def get_current_user(
+def get_token_blacklist_key(jti: str) -> str:
+    return f"{TOKEN_BLACKLIST_PREFIX}{jti}"
+
+
+def get_redis():
+    return redis_client
+
+
+async def get_current_token_payload(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
-    db: AsyncSession = Depends(get_db),
-) -> User:
+    redis=Depends(get_redis),
+) -> dict:
     token = credentials.credentials
     payload = verify_token(token)
 
@@ -26,6 +35,32 @@ async def get_current_user(
             detail="Invalid authentication token",
         )
 
+    if payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+        )
+
+    jti = payload.get("jti")
+    if not jti:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+
+    if await redis.exists(get_token_blacklist_key(jti)):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Revoked authentication token",
+        )
+
+    return payload
+
+
+async def get_current_user(
+    payload: dict = Depends(get_current_token_payload),
+    db: AsyncSession = Depends(get_db),
+) -> User:
     user_id = payload.get("sub")
     if user_id is None:
         raise HTTPException(
@@ -49,7 +84,3 @@ async def get_current_user(
         )
 
     return user
-
-
-def get_redis():
-    return redis_client

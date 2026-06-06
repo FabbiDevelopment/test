@@ -130,16 +130,10 @@ async def update_existing_todo(
             detail="Not authorized to access this todo",
         )
 
-    update_data = todo_data.model_dump()
+    update_data = todo_data.model_dump(exclude_unset=True)
 
-    if todo_data.completed:
-        todo.completed = todo_data.completed
-
-    # Apply other updates
-    if update_data.get("title") is not None:
-        todo.title = update_data["title"]
-    if "description" in update_data:
-        todo.description = update_data["description"]
+    for key, value in update_data.items():
+        setattr(todo, key, value)
 
     updated_todo = await update_todo(db, todo, {})
 

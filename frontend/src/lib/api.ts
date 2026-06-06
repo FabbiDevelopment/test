@@ -1,4 +1,6 @@
 import axios from "axios";
+import { clearAuthTokens, getAccessToken } from "@/features/auth/api/session";
+import { queryClient } from "./queryClient";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -12,7 +14,7 @@ export const api = axios.create({
 // Request interceptor: attach Bearer token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("access_token");
+    const token = getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -27,9 +29,16 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
+    const requestUrl = error.config?.url ?? "";
+    const isAuthFormRequest =
+      requestUrl.endsWith("/auth/login") ||
+      requestUrl.endsWith("/auth/register");
+    const hadToken = Boolean(error.config?.headers?.Authorization);
+
+    if (error.response?.status === 401 && hadToken && !isAuthFormRequest) {
+      clearAuthTokens();
+      queryClient.removeQueries({ queryKey: ["currentUser"] });
+      queryClient.removeQueries({ queryKey: ["todos"] });
       window.location.href = "/login";
     }
     return Promise.reject(error);

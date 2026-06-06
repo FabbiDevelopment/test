@@ -44,6 +44,15 @@ async def get_todo_by_id(db: AsyncSession, todo_id: uuid.UUID) -> Todo | None:
     return result.scalar_one_or_none()
 
 
+async def get_todo_by_id_for_user(
+    db: AsyncSession, todo_id: uuid.UUID, user_id: uuid.UUID
+) -> Todo | None:
+    result = await db.execute(
+        select(Todo).where(Todo.id == todo_id, Todo.user_id == user_id)
+    )
+    return result.scalar_one_or_none()
+
+
 async def update_todo(db: AsyncSession, todo: Todo, update_data: dict) -> Todo:
     for key, value in update_data.items():
         setattr(todo, key, value)

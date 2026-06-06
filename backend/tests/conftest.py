@@ -11,11 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
-from app.api.deps import get_redis
-from app.core.security import create_access_token
-from app.db.base import Base
-from app.db.session import get_db
-from app.main import app
+from app.api.deps import get_redis  # noqa: E402
+from app.core.security import create_access_token  # noqa: E402
+from app.db.base import Base  # noqa: E402
+from app.db.session import get_db  # noqa: E402
+from app.main import app  # noqa: E402
 
 test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 test_session_maker = async_sessionmaker(
@@ -56,6 +56,7 @@ def override_get_redis():
     mock_redis.get = AsyncMock(return_value=None)
     mock_redis.set = AsyncMock()
     mock_redis.delete = AsyncMock()
+    mock_redis.delete_pattern = AsyncMock()
     return mock_redis
 
 

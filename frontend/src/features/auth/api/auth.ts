@@ -1,5 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
+import { clearAuthTokens, setAuthTokens } from "./session";
 
 interface LoginRequest {
   email: string;
@@ -17,6 +19,11 @@ interface TokenResponse {
   token_type: string;
 }
 
+function clearAuthScopedQueries() {
+  queryClient.removeQueries({ queryKey: ["currentUser"] });
+  queryClient.removeQueries({ queryKey: ["todos"] });
+}
+
 export function useLogin() {
   return useMutation({
     mutationFn: async (data: LoginRequest): Promise<TokenResponse> => {
@@ -24,8 +31,8 @@ export function useLogin() {
       return response.data;
     },
     onSuccess: (data) => {
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("refresh_token", data.refresh_token);
+      clearAuthScopedQueries();
+      setAuthTokens(data);
     },
   });
 }
@@ -37,8 +44,8 @@ export function useRegister() {
       return response.data;
     },
     onSuccess: (data) => {
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("refresh_token", data.refresh_token);
+      clearAuthScopedQueries();
+      setAuthTokens(data);
     },
   });
 }
@@ -49,8 +56,8 @@ export function useLogout() {
       await api.post("/auth/logout");
     },
     onSuccess: () => {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
+      clearAuthTokens();
+      clearAuthScopedQueries();
     },
   });
 }

@@ -14,6 +14,11 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
+  
+  redisinsight:
+    image: redis/redisinsight:2.70
+    ports:
+      - "5540:5540"
 
   backend:
     build:
@@ -21,13 +26,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://fabbi:fabbi_secret@postgres:5432/postgres
-      REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: super-secret-key-change-in-production
-      JWT_ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 30
-      REFRESH_TOKEN_EXPIRE_DAYS: 7
+    env_file:
+      - .env.docker
     depends_on:
       - postgres
       - redis

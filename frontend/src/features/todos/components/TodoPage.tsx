@@ -8,10 +8,16 @@ import { TodoList } from "./TodoList";
 import { TodoForm } from "./TodoForm";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
+const TODO_PAGE_SIZE = 50;
+
 export function TodoPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const { data, isLoading, error } = useTodos();
+  const [page, setPage] = useState(1);
+  const { data, isLoading, error } = useTodos(page, TODO_PAGE_SIZE);
   const { user, logout } = useAuth();
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.size)) : 1;
+  const canGoPrevious = page > 1;
+  const canGoNext = data ? page < totalPages : false;
 
   return (
     <div className="min-h-screen bg-muted/40">
@@ -58,8 +64,31 @@ export function TodoPage() {
             {data && <TodoList todos={data.items} />}
 
             {data && data.total > 0 && (
-              <div className="mt-4 text-center text-sm text-muted-foreground">
-                Showing {data.items.length} of {data.total} todos
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-center text-sm text-muted-foreground sm:text-left">
+                  Showing {data.items.length} of {data.total} todos
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canGoPrevious}
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="min-w-16 text-center text-sm text-muted-foreground">
+                    {page} / {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canGoNext}
+                    onClick={() => setPage((current) => current + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Log Updater"
+  short_description: "Append review findings and fix summaries to project docs."
+  default_prompt: "Use this skill when recording discovered bugs or implemented fixes in this repository. Append new entries to docs/code-review-findings.md for findings and docs/fix-summary.md for fixes without rewriting existing content."

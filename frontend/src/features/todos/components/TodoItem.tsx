@@ -5,7 +5,6 @@ import type { Todo } from "../api/todos";
 
 interface TodoItemProps {
   todo: Todo;
-  index: number;
   onToggle: (todo: Todo) => void;
   onEdit: (todo: Todo) => void;
   onDelete: (id: string) => void;
@@ -36,7 +35,7 @@ export function TodoItem({ todo, onToggle, onEdit, onDelete }: TodoItemProps) {
         )}
       </div>
 
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1">
         <Button
           variant="ghost"
           size="icon"

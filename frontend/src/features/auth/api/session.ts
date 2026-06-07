@@ -4,7 +4,6 @@ const AUTH_SESSION_KEY = "auth_session_id";
 
 interface AuthTokens {
   access_token: string;
-  refresh_token: string;
 }
 
 function createSessionId() {
@@ -21,7 +20,7 @@ export function getAccessToken() {
 
 export function setAuthTokens(tokens: AuthTokens) {
   localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
-  localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.setItem(AUTH_SESSION_KEY, createSessionId());
 }
 

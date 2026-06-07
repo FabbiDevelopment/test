@@ -1,12 +1,16 @@
 """Todo tests."""
 
 from fnmatch import fnmatch
+from types import SimpleNamespace
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_redis
 from app.main import app
+from app.models.todo import Todo
 
 
 async def get_auth_token(client: AsyncClient, email: str = "todo@example.com") -> str:
@@ -57,6 +61,68 @@ async def test_get_todos(client: AsyncClient):
     assert "items" in data
     assert "total" in data
     assert len(data["items"]) >= 1
+
+
+@pytest.mark.asyncio
+async def test_todo_list_rejects_oversized_page(client: AsyncClient):
+    """Todo list page size has a bounded maximum."""
+    token = await get_auth_token(client, "oversized-page@example.com")
+
+    response = await client.get(
+        "/api/v1/todos?size=51",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_todo_list_uses_current_user_email_without_user_lookup(
+    monkeypatch,
+):
+    """User-scoped todo listings do not query users once per todo row."""
+    from app.api.v1 import todos as todos_api
+
+    user_id = "00000000-0000-0000-0000-000000000001"
+    current_user = SimpleNamespace(
+        id=user_id,
+        email="no-n-plus-one@example.com",
+    )
+    todo = SimpleNamespace(
+        id="00000000-0000-0000-0000-000000000002",
+        title="No extra user lookup",
+        description=None,
+        completed=False,
+        user_id=user_id,
+        created_at="2026-06-07T00:00:00+00:00",
+        updated_at="2026-06-07T00:00:00+00:00",
+    )
+
+    async def fake_get_todos(db, user_id, skip, limit):
+        return [todo], 1
+
+    class FailingDb:
+        async def execute(self, *args, **kwargs):
+            raise AssertionError("todo listing should not query users per item")
+
+    class EmptyRedis:
+        async def get(self, key):
+            return None
+
+        async def set(self, key, value, ex=None):
+            return None
+
+    monkeypatch.setattr(todos_api, "get_todos", fake_get_todos)
+
+    response = await todos_api.list_todos(
+        page=1,
+        size=20,
+        current_user=current_user,
+        db=FailingDb(),
+        redis=EmptyRedis(),
+    )
+
+    assert response.items[0].user_email == "no-n-plus-one@example.com"
 
 
 @pytest.mark.asyncio
@@ -259,6 +325,55 @@ async def test_todo_mutations_invalidate_current_users_list_cache(
     expected_pattern = cache_key.rsplit(":page:", 1)[0] + ":*"
     assert fake_redis.deleted_patterns.count(expected_pattern) == 3
     assert cache_key in fake_redis.deleted_keys
+
+
+@pytest.mark.asyncio
+async def test_todo_mutations_commit_before_cache_invalidation(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch,
+):
+    """Cache invalidation happens only after mutation commits are visible."""
+    from app.api.v1 import todos as todos_api
+
+    token = await get_auth_token(client, "commit-before-invalidate@example.com")
+    observed_titles = []
+
+    async def observe_committed_todos(redis, user_id):
+        await db_session.rollback()
+        result = await db_session.execute(
+            select(Todo.title).where(Todo.user_id == user_id).order_by(Todo.created_at)
+        )
+        observed_titles.append(list(result.scalars().all()))
+
+    monkeypatch.setattr(todos_api, "invalidate_todo_list_cache", observe_committed_todos)
+
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Before Commit"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    todo_id = create_response.json()["id"]
+
+    update_response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "After Commit"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    delete_response = await client.delete(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert create_response.status_code == 201
+    assert update_response.status_code == 200
+    assert delete_response.status_code == 204
+    assert observed_titles == [
+        ["Before Commit"],
+        ["After Commit"],
+        [],
+    ]
 
 
 @pytest.mark.asyncio

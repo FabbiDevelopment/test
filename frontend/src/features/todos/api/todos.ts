@@ -38,7 +38,7 @@ const todoKeys = {
     [...todoKeys.all, "list", { page, size, sessionKey }] as const,
 };
 
-export function useTodos(page: number = 1, size: number = 10000) {
+export function useTodos(page: number = 1, size: number = 50) {
   const sessionKey = getAuthSessionKey();
 
   return useQuery({

@@ -2,7 +2,6 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_redis
@@ -37,7 +36,7 @@ async def invalidate_todo_list_cache(redis: RedisClient, user_id: uuid.UUID) -> 
 @router.get("", response_model=TodoListResponse)
 async def list_todos(
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1),
+    size: int = Query(20, ge=1, le=50),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     redis: RedisClient = Depends(get_redis),
@@ -57,8 +56,6 @@ async def list_todos(
 
     items = []
     for todo in todos:
-        user_result = await db.execute(select(User).where(User.id == todo.user_id))
-        user = user_result.scalar_one_or_none()
         items.append(
             TodoResponse(
                 id=todo.id,
@@ -68,7 +65,7 @@ async def list_todos(
                 user_id=todo.user_id,
                 created_at=todo.created_at,
                 updated_at=todo.updated_at,
-                user_email=user.email if user else None,
+                user_email=current_user.email,
             )
         )
 
@@ -94,6 +91,7 @@ async def create_new_todo(
 ):
     """Create a new todo item."""
     todo = await create_todo(db, todo_data, current_user.id)
+    await db.commit()
     await invalidate_todo_list_cache(redis, current_user.id)
     return todo
 
@@ -133,6 +131,7 @@ async def update_existing_todo(
 
     update_data = todo_data.model_dump(exclude_unset=True)
     updated_todo = await update_todo(db, todo, update_data)
+    await db.commit()
     await invalidate_todo_list_cache(redis, current_user.id)
 
     return updated_todo
@@ -154,6 +153,7 @@ async def delete_existing_todo(
         )
 
     await delete_todo(db, todo)
+    await db.commit()
     await invalidate_todo_list_cache(redis, current_user.id)
 
     return None

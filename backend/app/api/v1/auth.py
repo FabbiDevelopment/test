@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_redis
 from app.core.redis import RedisClient
-from app.core.security import create_access_token, create_refresh_token, verify_token
+from app.core.security import TokenError, create_access_token, create_refresh_token, verify_token
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import (
@@ -81,15 +81,21 @@ async def refresh_token(
     redis: RedisClient = Depends(get_redis),
 ):
     """Refresh access token using refresh token."""
-    payload = verify_token(request.refresh_token)
+    result = verify_token(request.refresh_token)
 
-    if payload is None or payload.get("type") != "refresh":
+    if isinstance(result, TokenError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=result.reason,
+        )
+
+    if result.get("type") != "refresh":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
         )
 
-    user_id = payload.get("sub")
+    user_id = result.get("sub")
     access_token = create_access_token(data={"sub": user_id})
     refresh_token = create_refresh_token(data={"sub": user_id})
 

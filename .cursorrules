@@ -1,0 +1,30 @@
+# Karpathy Guidelines — Project Rules
+
+## 1. Think Before Coding
+- State assumptions explicitly; ask if uncertain.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop, name what's confusing, and ask.
+
+## 2. Simplicity First
+- Minimum code that solves the problem. Nothing speculative.
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No error handling for impossible scenarios.
+- If 200 lines can be 50, rewrite it.
+
+## 3. Surgical Changes
+- Touch only what you must. Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+## 4. Goal-Driven Execution
+- Define verifiable success criteria for every task.
+- Use checklist format:
+  ```
+  1. [Step] → verify: [check]
+  2. [Step] → verify: [check]
+  ```
+- Loop until verified; weak criteria require constant clarification.

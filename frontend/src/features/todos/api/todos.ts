@@ -31,10 +31,9 @@ interface UpdateTodoRequest {
   completed?: boolean;
 }
 
-
 export function useTodos(page: number = 1, size: number = 10000) {
   return useQuery({
-    queryKey: ["todos"],
+    queryKey: ["todos", { page, size }],
     queryFn: async (): Promise<TodoListResponse> => {
       const response = await api.get("/todos", {
         params: { page, size },
@@ -60,7 +59,6 @@ export function useCreateTodo() {
   });
 }
 
-
 export function useUpdateTodo() {
   return useMutation({
     mutationFn: async ({
@@ -78,21 +76,30 @@ export function useUpdateTodo() {
       await queryClient.cancelQueries({ queryKey: ["todos"] });
 
       // Snapshot previous value
-      const previousTodos = queryClient.getQueryData<TodoListResponse>(["todos"]);
+      const previousTodos = queryClient.getQueriesData<TodoListResponse>({
+        queryKey: ["todos"],
+      });
 
       // Optimistically update
-      if (previousTodos) {
-        queryClient.setQueryData<TodoListResponse>(["todos"], {
-          ...previousTodos,
-          items: previousTodos.items.map((todo) =>
-            todo.id === id ? { ...todo, ...data } : todo
-          ),
-        });
-      }
+      queryClient.setQueriesData<TodoListResponse>(
+        { queryKey: ["todos"] },
+        (old) =>
+          old
+            ? {
+                ...old,
+                items: old.items.map((todo) =>
+                  todo.id === id ? { ...todo, ...data } : todo
+                ),
+              }
+            : old
+      );
 
       return { previousTodos };
     },
-    onError: () => {
+    onError: (_error, _variables, context) => {
+      context?.previousTodos.forEach(([queryKey, data]) => {
+        queryClient.setQueryData(queryKey, data);
+      });
       toast.error("Failed to update todo");
     },
     onSettled: () => {

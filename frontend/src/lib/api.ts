@@ -23,14 +23,43 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor: handle 401
+// Response interceptor: handle 401 & Refresh Token
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-      window.location.href = "/login";
+  async (error) => {
+    const originalRequest = error.config;
+
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      const refreshToken = localStorage.getItem("refresh_token");
+
+      if (refreshToken) {
+        try {
+          
+          const response = await axios.post(`${API_URL}/api/v1/auth/refresh`, {
+             refresh_token: refreshToken 
+          });
+          
+          const newAccessToken = response.data.access_token;
+          localStorage.setItem("access_token", newAccessToken);
+          
+          
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+          return api(originalRequest);
+        } catch (refreshError) {
+          
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("refresh_token");
+          window.location.href = "/login";
+          return Promise.reject(refreshError);
+        }
+      } else {
+        
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        window.location.href = "/login";
+      }
     }
     return Promise.reject(error);
   }

@@ -1,7 +1,9 @@
 """Auth tests."""
 
 import pytest
+from datetime import timedelta
 from httpx import AsyncClient
+from app.core.security import create_access_token
 
 
 @pytest.mark.asyncio
@@ -75,3 +77,90 @@ async def test_logout(client: AsyncClient):
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Successfully logged out"
+
+
+# ── NEW SECURITY TESTS ─────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_expired_token_is_rejected(client: AsyncClient):
+    """Expired tokens must be rejected with 401 (validates verify_exp fix)."""
+    # Create a token that expired 1 second in the past
+    expired_token = create_access_token(
+        data={"sub": "00000000-0000-0000-0000-000000000001"},
+        expires_delta=timedelta(seconds=-1),
+    )
+
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
+    assert response.status_code == 401, (
+        f"Expected 401 for expired token, got {response.status_code}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_login_wrong_email_returns_401_not_404(client: AsyncClient):
+    """Login with non-existent email must return 401, not 404 (no user enumeration)."""
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "nonexistent@example.com", "password": "anypassword"},
+    )
+    assert response.status_code == 401, (
+        f"Expected 401 to prevent user enumeration, got {response.status_code}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_login_wrong_password_returns_401(client: AsyncClient):
+    """Login with wrong password must return 401."""
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "wrongpw@example.com", "password": "correct_password"},
+    )
+
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "wrongpw@example.com", "password": "wrong_password"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_register_duplicate_email_rejected(client: AsyncClient):
+    """Registering with an already-used email must be rejected."""
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "dup@example.com", "password": "password123"},
+    )
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "dup@example.com", "password": "different_password"},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_refresh_deleted_user_returns_401(client: AsyncClient):
+    """Refresh token for a user that no longer exists must return 401.
+
+    We create a refresh token whose 'sub' (user UUID) was never inserted into
+    the test database, simulating a deleted user.
+    """
+    from datetime import timedelta
+    from app.core.security import create_refresh_token
+
+    # Fabricate a refresh token for a non-existent user UUID
+    ghost_refresh = create_refresh_token(
+        data={"sub": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"},
+        expires_delta=timedelta(days=7),
+    )
+
+    response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": ghost_refresh},
+    )
+    assert response.status_code == 401, (
+        f"Expected 401 for deleted user refresh, got {response.status_code}: {response.text}"
+    )

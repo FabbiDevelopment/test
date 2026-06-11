@@ -27,6 +27,8 @@ def upgrade() -> None:
         sa.Column("hashed_password", sa.String(length=255), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
+        # FIX #11: email must be unique to prevent duplicate accounts
+        sa.UniqueConstraint("email", name="uq_users_email"),
     )
 
     # Create todos table
@@ -43,7 +45,13 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
+    # FIX #12: Add indexes for frequent query patterns
+    op.create_index("ix_todos_user_id", "todos", ["user_id"])
+    op.create_index("ix_todos_user_id_created_at", "todos", ["user_id", "created_at"])
+
 
 def downgrade() -> None:
+    op.drop_index("ix_todos_user_id_created_at", table_name="todos")
+    op.drop_index("ix_todos_user_id", table_name="todos")
     op.drop_table("todos")
     op.drop_table("users")

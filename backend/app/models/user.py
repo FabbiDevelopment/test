@@ -21,6 +21,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
+        unique=True,  # FIX: enforce at ORM + DB level
     )
     hashed_password: Mapped[str] = mapped_column(
         String(255),

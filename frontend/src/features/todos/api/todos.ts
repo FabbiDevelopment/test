@@ -32,9 +32,13 @@ interface UpdateTodoRequest {
 }
 
 
-export function useTodos(page: number = 1, size: number = 10000) {
+// FIX #13: Default size was 10000 — fetching all todos at once is a DoS risk.
+// Reduced to a safe default of 20 per page.
+export function useTodos(page: number = 1, size: number = 20) {
   return useQuery({
-    queryKey: ["todos"],
+    // FIX #14: Query key MUST include pagination params so different pages
+    // are cached separately and invalidation targets the right entries.
+    queryKey: ["todos", page, size],
     queryFn: async (): Promise<TodoListResponse> => {
       const response = await api.get("/todos", {
         params: { page, size },
@@ -51,6 +55,7 @@ export function useCreateTodo() {
       return response.data;
     },
     onSuccess: () => {
+      // Invalidate all todo list queries (any page/size combination)
       queryClient.invalidateQueries({ queryKey: ["todos"] });
       toast.success("Todo created successfully!");
     },
@@ -77,22 +82,31 @@ export function useUpdateTodo() {
       // Cancel outgoing queries
       await queryClient.cancelQueries({ queryKey: ["todos"] });
 
-      // Snapshot previous value
-      const previousTodos = queryClient.getQueryData<TodoListResponse>(["todos"]);
+      // Snapshot ALL cached todo pages so we can roll back any of them
+      const previousTodosMap = queryClient.getQueriesData<TodoListResponse>({
+        queryKey: ["todos"],
+      });
 
-      // Optimistically update
-      if (previousTodos) {
-        queryClient.setQueryData<TodoListResponse>(["todos"], {
-          ...previousTodos,
-          items: previousTodos.items.map((todo) =>
+      // Optimistically update all matching cached pages
+      queryClient.setQueriesData<TodoListResponse>({ queryKey: ["todos"] }, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          items: old.items.map((todo) =>
             todo.id === id ? { ...todo, ...data } : todo
           ),
+        };
+      });
+
+      return { previousTodosMap };
+    },
+    onError: (_err, _vars, context) => {
+      // FIX #15: Roll back optimistic updates using the snapshot from context
+      if (context?.previousTodosMap) {
+        context.previousTodosMap.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
         });
       }
-
-      return { previousTodos };
-    },
-    onError: () => {
       toast.error("Failed to update todo");
     },
     onSettled: () => {

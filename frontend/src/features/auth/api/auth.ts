@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
 
 interface LoginRequest {
   email: string;
@@ -51,6 +52,9 @@ export function useLogout() {
     onSuccess: () => {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
+      // FIX #16: Clear ALL React Query cached data so user A's todos
+      // are not visible when user B logs in on the same browser.
+      queryClient.clear();
     },
   });
 }

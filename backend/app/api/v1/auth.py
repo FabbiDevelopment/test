@@ -49,20 +49,16 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     """Authenticate user and return tokens."""
+    # FIX #9: Use constant-time 401 for both wrong email & wrong password
+    # to prevent user enumeration (previously returned 404 for missing user).
     user = await get_user_by_email(db, user_data.email)
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User with this email not found",
-        )
 
     from app.core.security import verify_password
 
-    if not verify_password(user_data.password, user.hashed_password):
+    if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password",
+            detail="Incorrect email or password",
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
@@ -81,6 +77,9 @@ async def refresh_token(
     redis: RedisClient = Depends(get_redis),
 ):
     """Refresh access token using refresh token."""
+    from app.services.auth_service import get_user_by_id
+    import uuid
+
     payload = verify_token(request.refresh_token)
 
     if payload is None or payload.get("type") != "refresh":
@@ -90,12 +89,28 @@ async def refresh_token(
         )
 
     user_id = payload.get("sub")
-    access_token = create_access_token(data={"sub": user_id})
-    refresh_token = create_refresh_token(data={"sub": user_id})
+    # FIX #10: Verify the user still exists in the database before issuing new tokens
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+
+    user = await get_user_by_id(db, user_uuid)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User no longer exists",
+        )
+
+    access_token = create_access_token(data={"sub": str(user.id)})
+    refresh_token_new = create_refresh_token(data={"sub": str(user.id)})
 
     return TokenResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
+        refresh_token=refresh_token_new,
     )
 
 

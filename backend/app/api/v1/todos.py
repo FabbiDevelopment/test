@@ -34,7 +34,7 @@ async def list_todos(
     """Get paginated list of todos."""
     skip = (page - 1) * size
 
-    cache_key = "todos:list"
+    cache_key = f"todos:list:{current_user.id}:{page}:{size}"
 
     # Try to get from cache
     cached = await redis.get(cache_key)
@@ -46,8 +46,6 @@ async def list_todos(
 
     items = []
     for todo in todos:
-        user_result = await db.execute(select(User).where(User.id == todo.user_id))
-        user = user_result.scalar_one_or_none()
         items.append(
             TodoResponse(
                 id=todo.id,
@@ -57,7 +55,7 @@ async def list_todos(
                 user_id=todo.user_id,
                 created_at=todo.created_at,
                 updated_at=todo.updated_at,
-                user_email=user.email if user else None,
+                user_email=current_user.email,
             )
         )
 
@@ -79,9 +77,15 @@ async def create_new_todo(
     todo_data: TodoCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis: RedisClient = Depends(get_redis),
 ):
     """Create a new todo item."""
     todo = await create_todo(db, todo_data, current_user.id)
+    
+    keys = await redis.client.keys(f"todos:list:{current_user.id}:*")
+    if keys:
+        await redis.client.delete(*keys)
+        
     return todo
 
 
@@ -93,7 +97,7 @@ async def get_todo(
 ):
     """Get a specific todo by ID."""
     todo = await get_todo_by_id(db, todo_id)
-    if not todo:
+    if not todo or todo.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo not found",
@@ -112,7 +116,7 @@ async def update_existing_todo(
 ):
     """Update a todo item."""
     todo = await get_todo_by_id(db, todo_id)
-    if not todo:
+    if not todo or todo.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo not found",
@@ -120,7 +124,7 @@ async def update_existing_todo(
 
     update_data = todo_data.model_dump()
 
-    if todo_data.completed:
+    if todo_data.completed is not None:
         todo.completed = todo_data.completed
 
     # Apply other updates
@@ -130,6 +134,10 @@ async def update_existing_todo(
         todo.description = update_data["description"]
 
     updated_todo = await update_todo(db, todo, {})
+    
+    keys = await redis.client.keys(f"todos:list:{current_user.id}:*")
+    if keys:
+        await redis.client.delete(*keys)
 
     return updated_todo
 
@@ -143,12 +151,16 @@ async def delete_existing_todo(
 ):
     """Delete a todo item."""
     todo = await get_todo_by_id(db, todo_id)
-    if not todo:
+    if not todo or todo.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo not found",
         )
 
     await delete_todo(db, todo)
+
+    keys = await redis.client.keys(f"todos:list:{current_user.id}:*")
+    if keys:
+        await redis.client.delete(*keys)
 
     return None

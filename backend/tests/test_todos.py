@@ -120,3 +120,40 @@ async def test_get_single_todo(client: AsyncClient):
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Single Todo"
+
+
+@pytest.mark.asyncio
+async def test_cross_user_access_denied(client: AsyncClient):
+    """Test that a user cannot access another user's todo."""
+    token1 = await get_auth_token(client, "user1@example.com")
+    token2 = await get_auth_token(client, "user2@example.com")
+
+    # User 1 creates a todo
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "User 1 Todo"},
+        headers={"Authorization": f"Bearer {token1}"},
+    )
+    todo_id = create_response.json()["id"]
+
+    # User 2 tries to access it
+    response = await client.get(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token2}"},
+    )
+    assert response.status_code == 404
+
+    # User 2 tries to update it
+    update_response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Hacked"},
+        headers={"Authorization": f"Bearer {token2}"},
+    )
+    assert update_response.status_code == 404
+
+    # User 2 tries to delete it
+    delete_response = await client.delete(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token2}"},
+    )
+    assert delete_response.status_code == 404

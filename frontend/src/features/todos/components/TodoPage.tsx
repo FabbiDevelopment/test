@@ -8,10 +8,21 @@ import { TodoList } from "./TodoList";
 import { TodoForm } from "./TodoForm";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
+import { TodoFilterBar } from "./TodoFilterBar";
+
+import { TagsManager } from "@/features/tags/components/TagsManager";
+
 export function TodoPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const { data, isLoading, error } = useTodos();
+  const [showTagsManager, setShowTagsManager] = useState(false);
+  const [filters, setFilters] = useState<{keyword?: string, status?: string}>({});
+  
+  const { data, isLoading, error } = useTodos(filters);
   const { user, logout } = useAuth();
+
+  const handleFilterChange = (key: string, value: string | undefined) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
 
   return (
     <div className="min-h-screen bg-muted/40">
@@ -36,13 +47,20 @@ export function TodoPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg">My Todos</CardTitle>
-            <Button size="sm" onClick={() => setShowCreateForm(true)}>
-              <Plus className="h-4 w-4 mr-1" />
-              Add Todo
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setShowTagsManager(true)}>
+                Manage Tags
+              </Button>
+              <Button size="sm" onClick={() => setShowCreateForm(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add Todo
+              </Button>
+            </div>
           </CardHeader>
           <Separator />
           <CardContent className="pt-4">
+            <TodoFilterBar filters={filters} onFilterChange={handleFilterChange} />
+            
             {isLoading && (
               <div className="text-center py-12 text-muted-foreground">
                 Loading todos...
@@ -72,6 +90,8 @@ export function TodoPage() {
         open={showCreateForm}
         onClose={() => setShowCreateForm(false)}
       />
+
+      <TagsManager open={showTagsManager} onClose={() => setShowTagsManager(false)} />
     </div>
   );
 }

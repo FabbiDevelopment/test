@@ -9,26 +9,51 @@ interface TodoItemProps {
   onToggle: (todo: Todo) => void;
   onEdit: (todo: Todo) => void;
   onDelete: (id: string) => void;
+  selected?: boolean;
+  onSelect?: (id: string, selected: boolean) => void;
 }
 
-export function TodoItem({ todo, onToggle, onEdit, onDelete }: TodoItemProps) {
+export function TodoItem({ todo, onToggle, onEdit, onDelete, selected, onSelect }: TodoItemProps) {
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors group">
+      {onSelect && (
+        <Checkbox
+          checked={selected}
+          onCheckedChange={(checked) => onSelect(todo.id, checked as boolean)}
+          className="mr-1"
+        />
+      )}
+      
       <Checkbox
         id={`todo-${todo.id}`}
         checked={todo.completed}
         onCheckedChange={() => onToggle(todo)}
       />
 
-      <div className="flex-1 min-w-0">
-        <label
-          htmlFor={`todo-${todo.id}`}
-          className={`text-sm font-medium cursor-pointer ${
-            todo.completed ? "line-through text-muted-foreground" : ""
-          }`}
-        >
-          {todo.title}
-        </label>
+      <div className="flex-1 min-w-0 flex flex-col justify-center">
+        <div className="flex items-center gap-2">
+          <label
+            htmlFor={`todo-${todo.id}`}
+            className={`text-sm font-medium cursor-pointer ${
+              todo.completed ? "line-through text-muted-foreground" : ""
+            }`}
+          >
+            {todo.title}
+          </label>
+          {todo.tags && todo.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {todo.tags.map(tag => (
+                <span 
+                  key={tag.id} 
+                  className="px-1.5 py-0.5 text-[10px] rounded-full border bg-background font-semibold"
+                  style={{ borderColor: tag.color || '#ccc', color: tag.color || 'inherit' }}
+                >
+                  {tag.name}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
         {todo.description && (
           <p className="text-xs text-muted-foreground mt-0.5 truncate">
             {todo.description}

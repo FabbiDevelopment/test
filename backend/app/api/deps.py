@@ -5,7 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import redis_client
-from app.core.security import verify_token
+from app.core.security import TokenError, verify_token
 from app.db.session import get_db
 from app.models.user import User
 from app.services.auth_service import get_user_by_id
@@ -18,15 +18,21 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ) -> User:
     token = credentials.credentials
-    payload = verify_token(token)
+    result = verify_token(token)
 
-    if payload is None:
+    if isinstance(result, TokenError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication token",
+            detail=result.reason,
         )
 
-    user_id = payload.get("sub")
+    if result.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
+        )
+
+    user_id = result.get("sub")
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

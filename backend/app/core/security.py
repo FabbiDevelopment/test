@@ -46,15 +46,28 @@ def create_refresh_token(data: dict, expires_delta: timedelta | None = None) -> 
     return encoded_jwt
 
 
-def verify_token(token: str) -> dict[str, Any] | None:
-    """Verify and decode a JWT token."""
+class TokenError:
+    """Represents a token verification failure with a reason."""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+
+
+def verify_token(token: str) -> dict[str, Any] | TokenError:
+    """Verify and decode a JWT token.
+
+    Returns the decoded payload dict on success, or a TokenError on failure.
+    Callers should check: ``if isinstance(result, TokenError): ...``
+    """
     try:
         payload = jwt.decode(
             token,
             settings.JWT_SECRET,
             algorithms=[settings.JWT_ALGORITHM],
-            options={"verify_exp": False},
+            options={"verify_exp": True},
         )
         return payload
+    except jwt.ExpiredSignatureError:
+        return TokenError("Token has expired")
     except JWTError:
-        return None
+        return TokenError("Invalid token")

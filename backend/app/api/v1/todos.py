@@ -2,7 +2,6 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_redis
@@ -31,10 +30,9 @@ async def list_todos(
     db: AsyncSession = Depends(get_db),
     redis: RedisClient = Depends(get_redis),
 ):
-    """Get paginated list of todos."""
+    """Get paginated list of todos for the current user."""
     skip = (page - 1) * size
-
-    cache_key = "todos:list"
+    cache_key = f"todos:user:{current_user.id}:page:{page}:size:{size}"
 
     # Try to get from cache
     cached = await redis.get(cache_key)
@@ -44,22 +42,19 @@ async def list_todos(
 
     todos, total = await get_todos(db, user_id=current_user.id, skip=skip, limit=size)
 
-    items = []
-    for todo in todos:
-        user_result = await db.execute(select(User).where(User.id == todo.user_id))
-        user = user_result.scalar_one_or_none()
-        items.append(
-            TodoResponse(
-                id=todo.id,
-                title=todo.title,
-                description=todo.description,
-                completed=todo.completed,
-                user_id=todo.user_id,
-                created_at=todo.created_at,
-                updated_at=todo.updated_at,
-                user_email=user.email if user else None,
-            )
+    items = [
+        TodoResponse(
+            id=todo.id,
+            title=todo.title,
+            description=todo.description,
+            completed=todo.completed,
+            user_id=todo.user_id,
+            created_at=todo.created_at,
+            updated_at=todo.updated_at,
+            user_email=current_user.email,
         )
+        for todo in todos
+    ]
 
     response = TodoListResponse(
         items=items,
@@ -68,7 +63,7 @@ async def list_todos(
         size=size,
     )
 
-    # Cache the response
+    # Cache the response scoped to this user and query parameters
     await redis.set(cache_key, response.model_dump_json(), ex=CACHE_TTL)
 
     return response
@@ -79,9 +74,15 @@ async def create_new_todo(
     todo_data: TodoCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis: RedisClient = Depends(get_redis),
 ):
-    """Create a new todo item."""
+    """Create a new todo item and invalidate user's cached todo list."""
     todo = await create_todo(db, todo_data, current_user.id)
+    todo.user_email = current_user.email
+
+    # Invalidate user-scoped todo list cache
+    await redis.delete_pattern(f"todos:user:{current_user.id}:*")
+
     return todo
 
 
@@ -91,7 +92,7 @@ async def get_todo(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get a specific todo by ID."""
+    """Get a specific todo by ID ensuring the current user owns it."""
     todo = await get_todo_by_id(db, todo_id)
     if not todo:
         raise HTTPException(
@@ -99,6 +100,13 @@ async def get_todo(
             detail="Todo not found",
         )
 
+    if todo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this todo",
+        )
+
+    todo.user_email = current_user.email
     return todo
 
 
@@ -110,7 +118,7 @@ async def update_existing_todo(
     db: AsyncSession = Depends(get_db),
     redis: RedisClient = Depends(get_redis),
 ):
-    """Update a todo item."""
+    """Update a todo item verifying ownership and preserving unset fields."""
     todo = await get_todo_by_id(db, todo_id)
     if not todo:
         raise HTTPException(
@@ -118,18 +126,18 @@ async def update_existing_todo(
             detail="Todo not found",
         )
 
-    update_data = todo_data.model_dump()
+    if todo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this todo",
+        )
 
-    if todo_data.completed:
-        todo.completed = todo_data.completed
+    update_data = todo_data.model_dump(exclude_unset=True)
+    updated_todo = await update_todo(db, todo, update_data)
+    updated_todo.user_email = current_user.email
 
-    # Apply other updates
-    if update_data.get("title") is not None:
-        todo.title = update_data["title"]
-    if "description" in update_data:
-        todo.description = update_data["description"]
-
-    updated_todo = await update_todo(db, todo, {})
+    # Invalidate user-scoped todo list cache
+    await redis.delete_pattern(f"todos:user:{current_user.id}:*")
 
     return updated_todo
 
@@ -141,7 +149,7 @@ async def delete_existing_todo(
     db: AsyncSession = Depends(get_db),
     redis: RedisClient = Depends(get_redis),
 ):
-    """Delete a todo item."""
+    """Delete a todo item verifying ownership and invalidating user's cache."""
     todo = await get_todo_by_id(db, todo_id)
     if not todo:
         raise HTTPException(
@@ -149,6 +157,15 @@ async def delete_existing_todo(
             detail="Todo not found",
         )
 
+    if todo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this todo",
+        )
+
     await delete_todo(db, todo)
+
+    # Invalidate user-scoped todo list cache
+    await redis.delete_pattern(f"todos:user:{current_user.id}:*")
 
     return None

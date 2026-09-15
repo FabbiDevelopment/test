@@ -3,7 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_redis
 from app.core.redis import RedisClient
-from app.core.security import create_access_token, create_refresh_token, verify_token
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    verify_password,
+    verify_token,
+)
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import (
@@ -28,12 +33,11 @@ async def register(
     existing_user = await get_user_by_email(db, user_data.email)
     if existing_user:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User with this email already exists",
         )
 
     user = await create_user(db, user_data)
-
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
 
@@ -51,18 +55,10 @@ async def login(
     """Authenticate user and return tokens."""
     user = await get_user_by_email(db, user_data.email)
 
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User with this email not found",
-        )
-
-    from app.core.security import verify_password
-
-    if not verify_password(user_data.password, user.hashed_password):
+    if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password",
+            detail="Invalid email or password",
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})

@@ -120,3 +120,61 @@ async def test_get_single_todo(client: AsyncClient):
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Single Todo"
+
+
+@pytest.mark.asyncio
+async def test_cross_user_todo_data_isolation(client: AsyncClient):
+    """A user must not see or mutate another user's todos."""
+    owner_token = await get_auth_token(client, "owner@example.com")
+    other_user_token = await get_auth_token(client, "other-user@example.com")
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    other_user_headers = {"Authorization": f"Bearer {other_user_token}"}
+
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Owner private todo", "description": "Private data"},
+        headers=owner_headers,
+    )
+    assert create_response.status_code == 201
+    owner_todo_id = create_response.json()["id"]
+
+    list_response = await client.get(
+        "/api/v1/todos",
+        headers=other_user_headers,
+    )
+    assert list_response.status_code == 200
+    assert owner_todo_id not in {
+        todo["id"] for todo in list_response.json()["items"]
+    }
+
+    get_response = await client.get(
+        f"/api/v1/todos/{owner_todo_id}",
+        headers=other_user_headers,
+    )
+    assert get_response.status_code == 404
+    assert get_response.json() == {"detail": "Todo not found"}
+
+    update_response = await client.put(
+        f"/api/v1/todos/{owner_todo_id}",
+        json={"title": "Unauthorized update", "completed": True},
+        headers=other_user_headers,
+    )
+    assert update_response.status_code == 404
+    assert update_response.json() == {"detail": "Todo not found"}
+
+    delete_response = await client.delete(
+        f"/api/v1/todos/{owner_todo_id}",
+        headers=other_user_headers,
+    )
+    assert delete_response.status_code == 404
+    assert delete_response.json() == {"detail": "Todo not found"}
+
+    owner_get_response = await client.get(
+        f"/api/v1/todos/{owner_todo_id}",
+        headers=owner_headers,
+    )
+    assert owner_get_response.status_code == 200
+    owner_todo = owner_get_response.json()
+    assert owner_todo["title"] == "Owner private todo"
+    assert owner_todo["description"] == "Private data"
+    assert owner_todo["completed"] is False

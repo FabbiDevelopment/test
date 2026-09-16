@@ -118,7 +118,7 @@ async def update_existing_todo(
             detail="Todo not found",
         )
 
-    update_data = todo_data.model_dump()
+    update_data = todo_data.model_dump(exclude_unset=True)
 
     if todo_data.completed is not None:
         todo.completed = todo_data.completed
@@ -129,7 +129,7 @@ async def update_existing_todo(
     if "description" in update_data:
         todo.description = update_data["description"]
 
-    updated_todo = await update_todo(db, todo, {})
+    updated_todo = await update_todo(db, todo, update_data)
 
     return updated_todo
 

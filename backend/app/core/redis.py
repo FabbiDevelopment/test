@@ -31,6 +31,17 @@ class RedisClient:
     async def delete(self, key: str):
         await self._redis.delete(key)
 
+    # SAI (cũ): chỉ có delete(key) — không xóa được nhiều key pagination/filter
+    # THÊM: delete_by_prefix — invalidate cache todos:list:{user_id}:*
+    async def delete_by_prefix(self, prefix: str) -> None:
+        cursor = 0
+        while True:
+            cursor, keys = await self._redis.scan(cursor, match=f"{prefix}*", count=100)
+            if keys:
+                await self._redis.delete(*keys)
+            if cursor == 0:
+                break
+
     async def exists(self, key: str) -> bool:
         return await self._redis.exists(key)
 

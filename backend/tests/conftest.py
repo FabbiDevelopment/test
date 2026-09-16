@@ -59,6 +59,32 @@ def override_get_redis():
     return mock_redis
 
 
+class FakeRedis:
+    """In-memory stand-in for RedisClient that actually remembers state,
+    unlike override_get_redis's always-miss mock."""
+
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+
+    async def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
+    async def set(self, key: str, value: str, ex: int | None = None) -> None:
+        self.store[key] = value
+
+    async def delete(self, key: str) -> None:
+        self.store.pop(key, None)
+
+
+@pytest.fixture
+def redis_fake():
+    """Override get_redis with a stateful fake for the duration of one test."""
+    fake = FakeRedis()
+    app.dependency_overrides[get_redis] = lambda: fake
+    yield fake
+    app.dependency_overrides[get_redis] = override_get_redis
+
+
 app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[get_redis] = override_get_redis
 

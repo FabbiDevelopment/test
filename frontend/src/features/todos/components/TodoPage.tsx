@@ -1,17 +1,26 @@
 import { useState } from "react";
-import { Plus, LogOut } from "lucide-react";
+import { Plus, LogOut, Tags } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useTodos } from "../api/todos";
+import { useTodos, type TodoFilters } from "../api/todos";
 import { TodoList } from "./TodoList";
 import { TodoForm } from "./TodoForm";
+import { TodoFilterBar } from "./TodoFilterBar";
+import { TagManager } from "@/features/tags/components/TagManager";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
 export function TodoPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const { data, isLoading, error } = useTodos();
+  const [showTagManager, setShowTagManager] = useState(false);
+  const [filters, setFilters] = useState<TodoFilters>({});
+
+  const { data, isLoading, error } = useTodos(filters);
   const { user, logout } = useAuth();
+
+  const handleResetFilters = () => {
+    setFilters({});
+  };
 
   return (
     <div className="min-h-screen bg-muted/40">
@@ -34,15 +43,32 @@ export function TodoPage() {
       {/* Main content */}
       <main className="max-w-3xl mx-auto px-4 py-8">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between pb-4">
             <CardTitle className="text-lg">My Todos</CardTitle>
-            <Button size="sm" onClick={() => setShowCreateForm(true)}>
-              <Plus className="h-4 w-4 mr-1" />
-              Add Todo
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTagManager(true)}
+              >
+                <Tags className="h-4 w-4 mr-1.5" />
+                Manage Tags
+              </Button>
+              <Button size="sm" onClick={() => setShowCreateForm(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add Todo
+              </Button>
+            </div>
           </CardHeader>
           <Separator />
           <CardContent className="pt-4">
+            {/* Filter Bar */}
+            <TodoFilterBar
+              filters={filters}
+              onFilterChange={setFilters}
+              onReset={handleResetFilters}
+            />
+
             {isLoading && (
               <div className="text-center py-12 text-muted-foreground">
                 Loading todos...
@@ -71,6 +97,12 @@ export function TodoPage() {
         mode="create"
         open={showCreateForm}
         onClose={() => setShowCreateForm(false)}
+      />
+
+      {/* Tag Manager Dialog */}
+      <TagManager
+        open={showTagManager}
+        onClose={() => setShowTagManager(false)}
       />
     </div>
   );

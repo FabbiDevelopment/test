@@ -7,8 +7,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-# Use SQLite for tests before app modules initialize their default engine.
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+# Use SQLite in container /tmp for tests to avoid bind-mount disk I/O lock issues on Windows.
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:////tmp/test.db")
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from app.api.deps import get_redis
@@ -56,11 +56,24 @@ def override_get_redis():
     mock_redis.get = AsyncMock(return_value=None)
     mock_redis.set = AsyncMock()
     mock_redis.delete = AsyncMock()
+    mock_redis.delete_pattern = AsyncMock()
     return mock_redis
 
 
 app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[get_redis] = override_get_redis
+
+
+@pytest.fixture
+def mock_redis_client():
+    mock_redis = MagicMock()
+    mock_redis.get = AsyncMock(return_value=None)
+    mock_redis.set = AsyncMock()
+    mock_redis.delete = AsyncMock()
+    mock_redis.delete_pattern = AsyncMock()
+    app.dependency_overrides[get_redis] = lambda: mock_redis
+    yield mock_redis
+    app.dependency_overrides[get_redis] = override_get_redis
 
 
 @pytest.fixture

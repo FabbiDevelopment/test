@@ -3,6 +3,12 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
 
+export interface TagBrief {
+  id: string;
+  name: string;
+  color: string | null;
+}
+
 export interface Todo {
   id: string;
   title: string;
@@ -11,6 +17,17 @@ export interface Todo {
   user_id: string;
   created_at: string;
   updated_at: string;
+  tags?: TagBrief[]; // THÊM: tags từ backend Level 4
+}
+
+export interface TodoFilters {
+  page?: number;
+  size?: number;
+  status?: "" | "active" | "completed";
+  tag_id?: string;
+  keyword?: string;
+  date_from?: string;
+  date_to?: string;
 }
 
 interface TodoListResponse {
@@ -31,14 +48,38 @@ interface UpdateTodoRequest {
   completed?: boolean;
 }
 
+// THÊM: queryKey phải gồm mọi filter param — Level 4 requirement
+function todosQueryKey(filters: TodoFilters) {
+  return [
+    "todos",
+    filters.page ?? 1,
+    filters.size ?? 10000,
+    filters.status ?? "",
+    filters.tag_id ?? "",
+    filters.keyword ?? "",
+    filters.date_from ?? "",
+    filters.date_to ?? "",
+  ] as const;
+}
 
-export function useTodos(page: number = 1, size: number = 10000) {
+export function useTodos(filters: TodoFilters = {}) {
+  const page = filters.page ?? 1;
+  const size = filters.size ?? 10000;
+
   return useQuery({
-    queryKey: ["todos"],
+    // SAI: queryKey: ["todos"] — bỏ qua page/size/filters, React Query tái sử dụng cache sai
+    // Không xóa comment SAI; dùng key đầy đủ bên dưới
+    // queryKey: ["todos"],
+    queryKey: todosQueryKey(filters), // THÊM: cache identity theo toàn bộ filter params
     queryFn: async (): Promise<TodoListResponse> => {
-      const response = await api.get("/todos", {
-        params: { page, size },
-      });
+      const params: Record<string, string | number> = { page, size };
+      if (filters.status) params.status = filters.status;
+      if (filters.tag_id) params.tag_id = filters.tag_id;
+      if (filters.keyword) params.keyword = filters.keyword;
+      if (filters.date_from) params.date_from = filters.date_from;
+      if (filters.date_to) params.date_to = filters.date_to;
+
+      const response = await api.get("/todos", { params });
       return response.data;
     },
   });
@@ -60,7 +101,6 @@ export function useCreateTodo() {
   });
 }
 
-
 export function useUpdateTodo() {
   return useMutation({
     mutationFn: async ({
@@ -74,25 +114,37 @@ export function useUpdateTodo() {
       return response.data;
     },
     onMutate: async ({ id, data }) => {
-      // Cancel outgoing queries
       await queryClient.cancelQueries({ queryKey: ["todos"] });
 
-      // Snapshot previous value
-      const previousTodos = queryClient.getQueryData<TodoListResponse>(["todos"]);
+      // SAI: getQueryData(["todos"]) — key thiếu filters nên không khớp cache thực tế
+      // THÊM: snapshot tất cả query prefix ["todos"] để rollback đúng
+      const previousQueries = queryClient.getQueriesData<TodoListResponse>({
+        queryKey: ["todos"],
+      });
 
-      // Optimistically update
-      if (previousTodos) {
-        queryClient.setQueryData<TodoListResponse>(["todos"], {
-          ...previousTodos,
-          items: previousTodos.items.map((todo) =>
-            todo.id === id ? { ...todo, ...data } : todo
-          ),
-        });
-      }
+      queryClient.setQueriesData<TodoListResponse>(
+        { queryKey: ["todos"] },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            items: old.items.map((todo) =>
+              todo.id === id ? { ...todo, ...data } : todo
+            ),
+          };
+        }
+      );
 
-      return { previousTodos };
+      return { previousQueries };
     },
-    onError: () => {
+    // SAI: onError chỉ toast, không rollback → UI sai sau lỗi API
+    // THÊM: khôi phục snapshot trước mutate
+    onError: (_err, _vars, context) => {
+      if (context?.previousQueries) {
+        for (const [queryKey, data] of context.previousQueries) {
+          queryClient.setQueryData(queryKey, data);
+        }
+      }
       toast.error("Failed to update todo");
     },
     onSettled: () => {
@@ -112,6 +164,32 @@ export function useDeleteTodo() {
     },
     onError: () => {
       toast.error("Failed to delete todo");
+    },
+  });
+}
+
+// THÊM: bulk status update — Level 4 PATCH /todos/bulk-status
+export function useBulkUpdateStatus() {
+  return useMutation({
+    mutationFn: async ({
+      todoIds,
+      completed,
+    }: {
+      todoIds: string[];
+      completed: boolean;
+    }) => {
+      const response = await api.patch("/todos/bulk-status", {
+        todo_ids: todoIds,
+        completed,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      toast.success("Bulk update completed!");
+    },
+    onError: () => {
+      toast.error("Bulk update failed");
     },
   });
 }

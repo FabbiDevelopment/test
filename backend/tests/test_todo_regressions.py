@@ -47,3 +47,21 @@ async def test_partial_update_preserves_description(client: AsyncClient):
 
     assert response.status_code == 200
     assert response.json()["description"] == "Do not erase me"
+
+
+@pytest.mark.asyncio
+async def test_explicit_null_completed_does_not_500(client: AsyncClient):
+    token = await get_auth_token(client, "null-completed@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    created = await client.post(
+        "/api/v1/todos", json={"title": "Null completed"}, headers=headers
+    )
+    todo_id = created.json()["id"]
+
+    response = await client.put(
+        f"/api/v1/todos/{todo_id}", json={"completed": None}, headers=headers
+    )
+
+    assert response.status_code == 200
+    assert response.json()["completed"] is False

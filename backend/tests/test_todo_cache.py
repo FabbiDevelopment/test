@@ -38,6 +38,12 @@ async def test_toggle_is_reflected_after_cached_list(client: AsyncClient, redis_
     after_toggle = await client.get("/api/v1/todos", headers=headers)
     assert after_toggle.json()["items"][0]["completed"] is True
 
+    await client.put(
+        f"/api/v1/todos/{todo_id}", json={"completed": False}, headers=headers
+    )
+    after_untoggle = await client.get("/api/v1/todos", headers=headers)
+    assert after_untoggle.json()["items"][0]["completed"] is False
+
 
 @pytest.mark.asyncio
 async def test_list_cache_is_scoped_per_user(client: AsyncClient, redis_fake):

@@ -83,6 +83,7 @@ async def create_new_todo(
 ):
     """Create a new todo item."""
     todo = await create_todo(db, todo_data, current_user.id)
+    await db.commit()
     await redis.delete(f"todos:list:{current_user.id}")
     return todo
 
@@ -126,10 +127,11 @@ async def update_existing_todo(
         todo.title = update_data["title"]
     if "description" in update_data:
         todo.description = update_data["description"]
-    if "completed" in update_data:
+    if update_data.get("completed") is not None:
         todo.completed = update_data["completed"]
 
     updated_todo = await update_todo(db, todo, {})
+    await db.commit()
     await redis.delete(f"todos:list:{current_user.id}")
 
     return updated_todo
@@ -151,6 +153,7 @@ async def delete_existing_todo(
         )
 
     await delete_todo(db, todo)
+    await db.commit()
     await redis.delete(f"todos:list:{current_user.id}")
 
     return None

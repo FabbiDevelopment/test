@@ -56,6 +56,7 @@ def override_get_redis():
     mock_redis.get = AsyncMock(return_value=None)
     mock_redis.set = AsyncMock()
     mock_redis.delete = AsyncMock()
+    mock_redis.delete_pattern = AsyncMock()
     return mock_redis
 
 
@@ -76,6 +77,14 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     async with test_session_maker() as session:
         yield session
+
+
+@pytest.fixture
+def redis_mock():
+    mock_redis = override_get_redis()
+    app.dependency_overrides[get_redis] = lambda: mock_redis
+    yield mock_redis
+    app.dependency_overrides[get_redis] = override_get_redis
 
 
 @pytest.fixture

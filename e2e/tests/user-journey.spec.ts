@@ -22,12 +22,23 @@ test.describe("Full user journey", () => {
     // Step 2: Verify redirect to dashboard — Xác minh chuyển hướng
     await expect(page.getByText("My Todos")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(uniqueEmail)).toBeVisible();
+    // Đợi GET /todos thành công — tránh tạo todo khi list đang lỗi (422 size, v.v.)
+    await expect(page.getByText("Failed to load todos")).not.toBeVisible({
+      timeout: 15_000,
+    });
 
     // Step 3: Create todo — Tạo việc cần làm
     await page.getByRole("button", { name: "Add Todo" }).click();
     await page.getByLabel("Title").fill(todoTitle);
+    const createResponse = page.waitForResponse(
+      (res) =>
+        res.url().includes("/api/v1/todos") &&
+        res.request().method() === "POST" &&
+        res.status() === 201
+    );
     await page.getByRole("button", { name: "Create" }).click();
-    await expect(page.getByText(todoTitle)).toBeVisible();
+    await createResponse;
+    await expect(page.getByText(todoTitle)).toBeVisible({ timeout: 10_000 });
 
     // Step 4: Toggle completed ON — Bật trạng thái hoàn thành
     const checkbox = page.getByRole("checkbox", { name: todoTitle });

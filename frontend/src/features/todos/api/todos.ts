@@ -49,11 +49,15 @@ interface UpdateTodoRequest {
 }
 
 // THÊM: queryKey phải gồm mọi filter param — Level 4 requirement
+// Backend giới hạn size <= 100 (Query le=100) — dùng DEFAULT_PAGE_SIZE khớp API
+const DEFAULT_PAGE_SIZE = 100;
+
 function todosQueryKey(filters: TodoFilters) {
   return [
     "todos",
     filters.page ?? 1,
-    filters.size ?? 10000,
+    // SAI: filters.size ?? 10000 — vượt max backend → GET /todos 422 → UI "Failed to load todos"
+    filters.size ?? DEFAULT_PAGE_SIZE,
     filters.status ?? "",
     filters.tag_id ?? "",
     filters.keyword ?? "",
@@ -64,7 +68,8 @@ function todosQueryKey(filters: TodoFilters) {
 
 export function useTodos(filters: TodoFilters = {}) {
   const page = filters.page ?? 1;
-  const size = filters.size ?? 10000;
+  // THÊM: default size=100 — khớp backend validation, E2E/dashboard load được list
+  const size = filters.size ?? DEFAULT_PAGE_SIZE;
 
   return useQuery({
     // SAI: queryKey: ["todos"] — bỏ qua page/size/filters, React Query tái sử dụng cache sai

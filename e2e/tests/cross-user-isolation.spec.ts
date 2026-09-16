@@ -27,12 +27,24 @@ test.describe("Cross-user data isolation", () => {
     await pageA.getByLabel("Confirm Password").fill(userA.password);
     await pageA.getByRole("button", { name: "Create Account" }).click();
     await expect(pageA.getByText("My Todos")).toBeVisible({ timeout: 10_000 });
+    await expect(pageA.getByText("Failed to load todos")).not.toBeVisible({
+      timeout: 15_000,
+    });
 
     // User A tạo todo riêng tư
     await pageA.getByRole("button", { name: "Add Todo" }).click();
     await pageA.getByLabel("Title").fill(privateTodoTitle);
+    const createA = pageA.waitForResponse(
+      (res) =>
+        res.url().includes("/api/v1/todos") &&
+        res.request().method() === "POST" &&
+        res.status() === 201
+    );
     await pageA.getByRole("button", { name: "Create" }).click();
-    await expect(pageA.getByText(privateTodoTitle)).toBeVisible();
+    await createA;
+    await expect(pageA.getByText(privateTodoTitle)).toBeVisible({
+      timeout: 10_000,
+    });
 
     // User A logout
     await pageA.getByRole("button", { name: "Logout" }).click();
@@ -49,6 +61,9 @@ test.describe("Cross-user data isolation", () => {
     await pageB.getByLabel("Confirm Password").fill(userB.password);
     await pageB.getByRole("button", { name: "Create Account" }).click();
     await expect(pageB.getByText("My Todos")).toBeVisible({ timeout: 10_000 });
+    await expect(pageB.getByText("Failed to load todos")).not.toBeVisible({
+      timeout: 15_000,
+    });
 
     // User B KHÔNG thấy todo của User A — data isolation check
     await expect(pageB.getByText(privateTodoTitle)).not.toBeVisible();

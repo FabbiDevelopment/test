@@ -25,11 +25,9 @@ test.db
 # Docker
 postgres_data/
 
-# Answer key (interviewer only)
+# Answer key (interviewer only — không commit)
 docs/ANSWER_KEY.md
 
 # OS
 .DS_Store
 Thumbs.db
-
-docs/

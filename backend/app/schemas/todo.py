@@ -33,3 +33,9 @@ class TodoListResponse(BaseModel):
     total: int
     page: int
     size: int
+
+
+class BulkStatusUpdate(BaseModel):
+    todo_ids: list[uuid.UUID]
+    completed: bool
+

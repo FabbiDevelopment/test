@@ -75,3 +75,15 @@ async def test_logout(client: AsyncClient):
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Successfully logged out"
+
+
+@pytest.mark.asyncio
+async def test_login_invalid_email_returns_401(client: AsyncClient):
+    """Test that login with non-existent email returns 401 Unauthorized (prevents user enumeration)."""
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "nonexistent@example.com", "password": "password123"},
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid email or password"
+

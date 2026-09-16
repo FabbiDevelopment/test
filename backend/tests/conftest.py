@@ -65,6 +65,18 @@ app.dependency_overrides[get_redis] = override_get_redis
 
 
 @pytest.fixture
+def mock_redis_client():
+    mock_redis = MagicMock()
+    mock_redis.get = AsyncMock(return_value=None)
+    mock_redis.set = AsyncMock()
+    mock_redis.delete = AsyncMock()
+    mock_redis.delete_pattern = AsyncMock()
+    app.dependency_overrides[get_redis] = lambda: mock_redis
+    yield mock_redis
+    app.dependency_overrides[get_redis] = override_get_redis
+
+
+@pytest.fixture
 async def client() -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(
         transport=ASGITransport(app=app),

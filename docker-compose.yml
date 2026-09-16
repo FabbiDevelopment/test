@@ -2,46 +2,83 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: fabbi
-      POSTGRES_PASSWORD: fabbi_secret
-      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-fabbi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fabbi_dev_only}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
     ports:
       - "5438:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   redis:
-    image: redis:7
+    image: redis:7-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-fabbi_redis_dev_only}
+    command:
+      - /bin/sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: runtime
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://fabbi:fabbi_secret@postgres:5432/postgres
-      REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: super-secret-key-change-in-production
-      JWT_ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 30
-      REFRESH_TOKEN_EXPIRE_DAYS: 7
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-fabbi}:${POSTGRES_PASSWORD:-fabbi_dev_only}@postgres:5432/${POSTGRES_DB:-postgres}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-fabbi_redis_dev_only}@redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-development-only-change-me}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: runtime
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
     ports:
-      - "3000:3000"
-    environment:
-      VITE_API_URL: http://localhost:8000
+      - "3000:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
+  redis_data:

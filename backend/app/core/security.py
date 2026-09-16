@@ -53,7 +53,12 @@ def verify_token(token: str) -> dict[str, Any] | None:
             token,
             settings.JWT_SECRET,
             algorithms=[settings.JWT_ALGORITHM],
-            options={"verify_exp": False},
+             
+            # SAI: options={"verify_exp": False} — tắt kiểm tra hết hạn JWT, token đã hết hạn vẫn được chấp nhận
+            # → lỗ hổng bảo mật nghiêm trọng, session không bao giờ thực sự hết hạn phía server
+            # Không xóa comment SAI để giữ cấu trúc audit; dùng cấu hình đúng bên dưới
+            # options={"verify_exp": False},
+            options={"verify_exp": True},  # THÊM: bật verify_exp để từ chối token đã hết hạn
         )
         return payload
     except JWTError:

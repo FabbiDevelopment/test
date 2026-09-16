@@ -51,18 +51,26 @@ async def login(
     """Authenticate user and return tokens."""
     user = await get_user_by_email(db, user_data.email)
 
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User with this email not found",
-        )
-
     from app.core.security import verify_password
 
-    if not verify_password(user_data.password, user.hashed_password):
+    # SAI: trả 404 "User with this email not found" khi email không tồn tại, 401 khi sai mật khẩu
+    # → user enumeration: attacker biết email nào đã đăng ký qua mã lỗi HTTP khác nhau
+    # Không xóa comment SAI; dùng phản hồi thống nhất bên dưới
+    # if not user:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_404_NOT_FOUND,
+    #         detail="User with this email not found",
+    #     )
+    # if not verify_password(user_data.password, user.hashed_password):
+    #     raise HTTPException(
+    #         status_code=status.HTTP_401_UNAUTHORIZED,
+    #         detail="Incorrect password",
+    #     )
+    # THÊM: luôn trả 401 với message chung — không tiết lộ email có tồn tại hay không
+    if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password",
+            detail="Incorrect email or password",
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})

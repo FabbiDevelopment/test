@@ -25,6 +25,14 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token",
         )
+    # SAI: thiếu kiểm tra payload["type"] == "access" — refresh token có thể dùng làm Bearer token
+    # trên mọi endpoint protected → bypass cơ chế phân tách access/refresh token
+    # Không xóa comment SAI; logic đúng được THÊM ngay bên dưới
+    if payload.get("type") != "access":  # THÊM: chỉ chấp nhận access token, từ chối refresh token
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
+        )
 
     user_id = payload.get("sub")
     if user_id is None:

@@ -9,11 +9,24 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # SAI (cũ): không healthcheck — backend có thể start trước khi PostgreSQL ready (cold start race)
+    # THÊM: healthcheck + depends_on condition service_healthy (Level 3B)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fabbi -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
-    image: redis:7
+    image: redis:7-alpine
     ports:
       - "6379:6379"
+    # THÊM: healthcheck Redis — tránh backend kết nối Redis khi chưa sẵn sàng
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   backend:
     build:
@@ -29,8 +42,10 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       REFRESH_TOKEN_EXPIRE_DAYS: 7
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   frontend:
     build:

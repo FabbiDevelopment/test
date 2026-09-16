@@ -1,0 +1,20 @@
+# THÊM: .dockerignore frontend — loại trừ node_modules khỏi build context
+# node_modules sẽ được install fresh trong container → reproducible builds
+
+node_modules
+dist
+.env
+.env.*
+!.env.example
+
+# Test & dev artifacts
+coverage
+*.log
+.vscode
+.idea
+.git
+.gitignore
+*.md
+
+# E2E không cần trong frontend image
+e2e/

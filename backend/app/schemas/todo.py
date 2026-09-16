@@ -15,6 +15,15 @@ class TodoUpdate(BaseModel):
     completed: bool | None = None
 
 
+class TagBrief(BaseModel):
+    # THÊM: tag summary trong todo response — Level 4
+    id: uuid.UUID
+    name: str
+    color: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class TodoResponse(BaseModel):
     id: uuid.UUID
     title: str
@@ -24,6 +33,7 @@ class TodoResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     user_email: str | None = None
+    tags: list[TagBrief] = []  # THÊM: tags đính kèm todo
 
     model_config = {"from_attributes": True}
 

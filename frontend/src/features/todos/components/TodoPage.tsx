@@ -3,19 +3,25 @@ import { Plus, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useTodos } from "../api/todos";
+import { useTodos, type TodoFilters } from "../api/todos";
 import { TodoList } from "./TodoList";
 import { TodoForm } from "./TodoForm";
+import { TodoFilterBar, EMPTY_FILTERS } from "./TodoFilterBar";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { TagManager } from "@/features/tags/components/TagManager";
+import { useTags } from "@/features/tags/api/tags";
 
 export function TodoPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const { data, isLoading, error } = useTodos();
+  const [filters, setFilters] = useState<TodoFilters>({ ...EMPTY_FILTERS });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const { data, isLoading, error } = useTodos(filters);
+  const { data: tags = [] } = useTags();
   const { user, logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-muted/40">
-      {/* Header */}
       <header className="bg-card border-b">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
@@ -31,8 +37,9 @@ export function TodoPage() {
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="max-w-3xl mx-auto px-4 py-8">
+      <main className="max-w-3xl mx-auto px-4 py-8 space-y-4">
+        <TagManager />
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg">My Todos</CardTitle>
@@ -43,6 +50,14 @@ export function TodoPage() {
           </CardHeader>
           <Separator />
           <CardContent className="pt-4">
+            {/* THÊM: filter bar — Level 4 */}
+            <TodoFilterBar
+              filters={filters}
+              tags={tags}
+              onChange={setFilters}
+              onClear={() => setFilters({ ...EMPTY_FILTERS })}
+            />
+
             {isLoading && (
               <div className="text-center py-12 text-muted-foreground">
                 Loading todos...
@@ -55,7 +70,14 @@ export function TodoPage() {
               </div>
             )}
 
-            {data && <TodoList todos={data.items} />}
+            {data && (
+              <TodoList
+                todos={data.items}
+                tags={tags}
+                selectedIds={selectedIds}
+                onSelectChange={setSelectedIds}
+              />
+            )}
 
             {data && data.total > 0 && (
               <div className="mt-4 text-center text-sm text-muted-foreground">
@@ -66,7 +88,6 @@ export function TodoPage() {
         </Card>
       </main>
 
-      {/* Create Todo Dialog */}
       <TodoForm
         mode="create"
         open={showCreateForm}

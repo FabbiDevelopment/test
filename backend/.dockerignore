@@ -1,0 +1,32 @@
+# THÊM: .dockerignore backend — giảm build context, tránh leak secrets vào image layer
+# Exclude dev artifacts / Loại trừ file dev không cần trong production image
+
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Test artifacts / File test không cần trong image
+test.db
+tests/
+.pytest_cache/
+htmlcov/
+.coverage
+*.cover
+
+# Git & IDE
+.git
+.gitignore
+*.md
+.vscode/
+.idea/
+
+# Alembic local state (migration files ARE needed — keep alembic/)
+# alembic/versions/ is included intentionally

@@ -178,3 +178,54 @@ async def test_cross_user_todo_data_isolation(client: AsyncClient):
     assert owner_todo["title"] == "Owner private todo"
     assert owner_todo["description"] == "Private data"
     assert owner_todo["completed"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_todo_true_to_false_and_partial_update(client: AsyncClient):
+    """Boolean false must be applied and omitted fields must remain unchanged."""
+    token = await get_auth_token(client, "partial-update@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={
+            "title": "Original title",
+            "description": "Original description",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+    todo_id = create_response.json()["id"]
+
+    mark_completed_response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"completed": True},
+        headers=headers,
+    )
+    assert mark_completed_response.status_code == 200
+    marked_todo = mark_completed_response.json()
+    assert marked_todo["completed"] is True
+    assert marked_todo["title"] == "Original title"
+    assert marked_todo["description"] == "Original description"
+
+    mark_incomplete_response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"completed": False},
+        headers=headers,
+    )
+    assert mark_incomplete_response.status_code == 200
+    incomplete_todo = mark_incomplete_response.json()
+    assert incomplete_todo["completed"] is False
+    assert incomplete_todo["title"] == "Original title"
+    assert incomplete_todo["description"] == "Original description"
+
+    partial_update_response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Partially updated title"},
+        headers=headers,
+    )
+    assert partial_update_response.status_code == 200
+    partially_updated_todo = partial_update_response.json()
+    assert partially_updated_todo["title"] == "Partially updated title"
+    assert partially_updated_todo["description"] == "Original description"
+    assert partially_updated_todo["completed"] is False

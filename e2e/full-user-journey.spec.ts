@@ -27,14 +27,16 @@ test("register, login, create and complete a todo, then logout", async ({
 
   await expect(page.getByText(title, { exact: true })).toBeVisible();
 
-  const checkbox = page.getByRole("checkbox", { name: title });
+  const checkbox = page.getByRole("checkbox", { name: title, exact: true });
   await checkbox.click();
   await expect(checkbox).toBeChecked();
 
   // Reload to prove the completed state was persisted by the backend.
   await page.reload();
   await expect(page.getByText(title, { exact: true })).toBeVisible();
-  await expect(page.getByRole("checkbox", { name: title })).toBeChecked();
+  await expect(
+    page.getByRole("checkbox", { name: title, exact: true }),
+  ).toBeChecked();
 
   await page.getByRole("button", { name: "Logout" }).click();
   await expect(page).toHaveURL("/login");

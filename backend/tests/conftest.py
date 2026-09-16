@@ -51,11 +51,24 @@ async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+mock_redis = MagicMock()
+mock_redis.get = AsyncMock(return_value=None)
+mock_redis.set = AsyncMock()
+mock_redis.delete = AsyncMock()
+mock_redis.delete_pattern = AsyncMock()
+
+
 def override_get_redis():
-    mock_redis = MagicMock()
+    return mock_redis
+
+
+@pytest.fixture
+def fake_redis():
+    mock_redis.reset_mock()
     mock_redis.get = AsyncMock(return_value=None)
     mock_redis.set = AsyncMock()
     mock_redis.delete = AsyncMock()
+    mock_redis.delete_pattern = AsyncMock()
     return mock_redis
 
 

@@ -10,8 +10,8 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 
 export function TodoPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const { data, isLoading, error } = useTodos();
   const { user, logout } = useAuth();
+  const { data, isLoading, error } = useTodos(user?.id);
 
   return (
     <div className="min-h-screen bg-muted/40">

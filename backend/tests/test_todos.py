@@ -79,6 +79,57 @@ async def test_update_todo(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_update_completed_from_true_to_false(client: AsyncClient):
+    """Updating completed to false must persist."""
+    token = await get_auth_token(client, "toggle@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Toggle Me"},
+        headers=headers,
+    )
+    todo_id = create_response.json()["id"]
+
+    await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"completed": True},
+        headers=headers,
+    )
+    response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"completed": False},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["completed"] is False
+
+
+@pytest.mark.asyncio
+async def test_user_cannot_update_another_users_todo(client: AsyncClient):
+    """Todo ownership must be enforced for updates."""
+    owner_token = await get_auth_token(client, "owner@example.com")
+    other_token = await get_auth_token(client, "other@example.com")
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Private Todo", "description": "Keep this"},
+        headers=owner_headers,
+    )
+    todo_id = create_response.json()["id"]
+
+    response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Compromised"},
+        headers=other_headers,
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_delete_todo(client: AsyncClient):
     """Test deleting a todo."""
     token = await get_auth_token(client, "delete@example.com")

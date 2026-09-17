@@ -1,8 +1,12 @@
 """Auth tests."""
 
+from datetime import timedelta
+
 import pytest
 from httpx import AsyncClient
+from jose import jwt
 
+from app.core.security import create_access_token
 
 @pytest.mark.asyncio
 async def test_register_success(client: AsyncClient):
@@ -75,3 +79,47 @@ async def test_logout(client: AsyncClient):
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Successfully logged out"
+
+
+@pytest.mark.asyncio
+async def test_expired_access_token_is_rejected(client: AsyncClient):
+    """Expired access tokens must not access protected endpoints."""
+    registration = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "expired@example.com", "password": "password123"},
+    )
+    user_id = registration.json()["access_token"]
+    payload = jwt.get_unverified_claims(user_id)
+    expired_token = create_access_token(
+        data={"sub": payload["sub"]},
+        expires_delta=timedelta(seconds=-1),
+    )
+
+    response = await client.get(
+        "/api/v1/todos",
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_logout_revokes_access_token(client: AsyncClient):
+    """A token cannot access protected endpoints after logout."""
+    registration = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "revoke@example.com", "password": "password123"},
+    )
+    tokens = registration.json()
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    logout_response = await client.post(
+        "/api/v1/auth/logout",
+        json={"refresh_token": tokens["refresh_token"]},
+        headers=headers,
+    )
+    assert logout_response.status_code == 200
+
+    response = await client.get("/api/v1/todos", headers=headers)
+
+    assert response.status_code == 401

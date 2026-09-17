@@ -3,6 +3,9 @@ import os
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
 
+test_redis = MagicMock()
+test_redis_store: dict[str, str] = {}
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -34,6 +37,20 @@ def event_loop():
 
 @pytest.fixture(autouse=True)
 async def setup_db():
+    test_redis_store.clear()
+    test_redis.reset_mock()
+    test_redis.get = AsyncMock(return_value=None)
+    
+    async def redis_set(key: str, value: str, ex: int | None = None):
+        test_redis_store[key] = value
+
+    async def redis_exists(key: str):
+        return int(key in test_redis_store)
+
+    test_redis.set = redis_set
+    test_redis.delete = AsyncMock()
+    test_redis.delete_pattern = AsyncMock()
+    test_redis.exists = redis_exists
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -52,11 +69,7 @@ async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 def override_get_redis():
-    mock_redis = MagicMock()
-    mock_redis.get = AsyncMock(return_value=None)
-    mock_redis.set = AsyncMock()
-    mock_redis.delete = AsyncMock()
-    return mock_redis
+    return test_redis
 
 
 app.dependency_overrides[get_db] = override_get_db

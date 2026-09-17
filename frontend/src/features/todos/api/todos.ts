@@ -92,7 +92,11 @@ export function useUpdateTodo() {
 
       return { previousTodos };
     },
-    onError: () => {
+    onError: (_error, _variables, context) => {
+      if (context?.previousTodos) {
+        queryClient.setQueryData(["todos"], context.previousTodos);
+      }
+
       toast.error("Failed to update todo");
     },
     onSettled: () => {

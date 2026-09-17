@@ -3,6 +3,9 @@
 import pytest
 from httpx import AsyncClient
 
+from app.core.security import create_access_token
+from datetime import timedelta
+
 
 @pytest.mark.asyncio
 async def test_register_success(client: AsyncClient):
@@ -75,3 +78,34 @@ async def test_logout(client: AsyncClient):
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Successfully logged out"
+
+
+@pytest.mark.asyncio
+async def test_expired_access_token_is_rejected(client: AsyncClient):
+    token = create_access_token(
+        data={"sub": "00000000-0000-0000-0000-000000000001"},
+        expires_delta=timedelta(seconds=-1),
+    )
+
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_cannot_access_protected_endpoint(client: AsyncClient):
+    registration = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "refresh-only@example.com", "password": "password123"},
+    )
+    refresh_token = registration.json()["refresh_token"]
+
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {refresh_token}"},
+    )
+
+    assert response.status_code == 401

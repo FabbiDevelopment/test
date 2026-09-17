@@ -24,6 +24,12 @@ test_session_maker = async_sessionmaker(
     expire_on_commit=False,
 )
 
+test_redis = MagicMock()
+test_redis.get = AsyncMock(return_value=None)
+test_redis.set = AsyncMock()
+test_redis.delete = AsyncMock()
+test_redis.delete_pattern = AsyncMock()
+
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -34,6 +40,7 @@ def event_loop():
 
 @pytest.fixture(autouse=True)
 async def setup_db():
+    test_redis.reset_mock()
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -52,11 +59,7 @@ async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 def override_get_redis():
-    mock_redis = MagicMock()
-    mock_redis.get = AsyncMock(return_value=None)
-    mock_redis.set = AsyncMock()
-    mock_redis.delete = AsyncMock()
-    return mock_redis
+    return test_redis
 
 
 app.dependency_overrides[get_db] = override_get_db

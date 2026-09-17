@@ -32,9 +32,10 @@ interface UpdateTodoRequest {
 }
 
 
-export function useTodos(page: number = 1, size: number = 10000) {
+export function useTodos(userId: string | undefined, page: number = 1, size: number = 20) {
   return useQuery({
-    queryKey: ["todos"],
+    queryKey: ["todos", userId, page, size],
+    enabled: Boolean(userId),
     queryFn: async (): Promise<TodoListResponse> => {
       const response = await api.get("/todos", {
         params: { page, size },
@@ -78,21 +79,28 @@ export function useUpdateTodo() {
       await queryClient.cancelQueries({ queryKey: ["todos"] });
 
       // Snapshot previous value
-      const previousTodos = queryClient.getQueryData<TodoListResponse>(["todos"]);
+      const previousTodos = queryClient.getQueriesData<TodoListResponse>({
+        queryKey: ["todos"],
+      });
 
       // Optimistically update
-      if (previousTodos) {
-        queryClient.setQueryData<TodoListResponse>(["todos"], {
-          ...previousTodos,
-          items: previousTodos.items.map((todo) =>
-            todo.id === id ? { ...todo, ...data } : todo
-          ),
-        });
-      }
+      previousTodos.forEach(([queryKey, todos]) => {
+        if (todos) {
+          queryClient.setQueryData<TodoListResponse>(queryKey, {
+            ...todos,
+            items: todos.items.map((todo) =>
+              todo.id === id ? { ...todo, ...data } : todo
+            ),
+          });
+        }
+      });
 
       return { previousTodos };
     },
-    onError: () => {
+    onError: (_error, _variables, context) => {
+      context?.previousTodos.forEach(([queryKey, todos]) => {
+        queryClient.setQueryData(queryKey, todos);
+      });
       toast.error("Failed to update todo");
     },
     onSettled: () => {

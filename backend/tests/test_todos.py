@@ -3,6 +3,8 @@
 import pytest
 from httpx import AsyncClient
 
+from tests.conftest import test_redis
+
 
 async def get_auth_token(client: AsyncClient, email: str = "todo@example.com") -> str:
     """Helper to register and get auth token."""
@@ -76,6 +78,79 @@ async def test_update_todo(client: AsyncClient):
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Updated Title"
+
+
+@pytest.mark.asyncio
+async def test_update_todo_preserves_description_and_can_uncomplete(client: AsyncClient):
+    token = await get_auth_token(client, "partial-update@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Update me", "description": "Keep this"},
+        headers=headers,
+    )
+    todo_id = create_response.json()["id"]
+
+    await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"completed": True},
+        headers=headers,
+    )
+    response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Updated", "completed": False},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["description"] == "Keep this"
+    assert response.json()["completed"] is False
+
+
+@pytest.mark.asyncio
+async def test_user_cannot_access_another_users_todo(client: AsyncClient):
+    owner_token = await get_auth_token(client, "owner@example.com")
+    other_token = await get_auth_token(client, "other@example.com")
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Private"},
+        headers=owner_headers,
+    )
+    todo_id = create_response.json()["id"]
+
+    assert (await client.get(f"/api/v1/todos/{todo_id}", headers=other_headers)).status_code == 404
+    assert (await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Stolen"},
+        headers=other_headers,
+    )).status_code == 404
+    assert (await client.delete(
+        f"/api/v1/todos/{todo_id}", headers=other_headers
+    )).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_todo_mutations_invalidate_user_cache(client: AsyncClient):
+    token = await get_auth_token(client, "cache@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Cache me"},
+        headers=headers,
+    )
+    todo_id = create_response.json()["id"]
+    await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Cached update"},
+        headers=headers,
+    )
+    await client.delete(f"/api/v1/todos/{todo_id}", headers=headers)
+
+    assert test_redis.delete_pattern.await_count == 3
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-
+import { queryClient } from "@/lib/queryClient";
 interface LoginRequest {
   email: string;
   password: string;
@@ -24,6 +24,7 @@ export function useLogin() {
       return response.data;
     },
     onSuccess: (data) => {
+      queryClient.removeQueries();
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("refresh_token", data.refresh_token);
     },
@@ -37,6 +38,7 @@ export function useRegister() {
       return response.data;
     },
     onSuccess: (data) => {
+      queryClient.removeQueries();
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("refresh_token", data.refresh_token);
     },
@@ -48,10 +50,11 @@ export function useLogout() {
     mutationFn: async () => {
       await api.post("/auth/logout");
     },
-    onSuccess: () => {
+    onSettled: () => {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
-    },
+      queryClient.removeQueries();
+    }
   });
 }
 

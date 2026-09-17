@@ -1,5 +1,5 @@
 import axios from "axios";
-
+import { queryClient } from "./queryClient";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export const api = axios.create({
@@ -30,6 +30,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
+      queryClient.removeQueries();
       window.location.href = "/login";
     }
     return Promise.reject(error);

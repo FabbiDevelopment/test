@@ -235,6 +235,17 @@ A clean Git history reflects professional engineering discipline:
 
 ---
 
+## Production containers
+
+The production Compose file contains no default secrets and does not expose PostgreSQL or Redis to the host. Copy the environment template, replace every placeholder with a strong value, and start the standalone production stack:
+
+```bash
+cp .env.example .env.production
+docker compose --env-file .env.production -f docker-compose.prod.yml up --build -d
+```
+
+`PUBLIC_API_URL` is embedded into the frontend bundle at image build time. Set it to the externally reachable backend URL before building the frontend image.
+
 ## Local Setup & Quick Start
 
 Follow the instructions in [GUIDE.md](GUIDE.md) to launch services with Docker or local virtual environments.

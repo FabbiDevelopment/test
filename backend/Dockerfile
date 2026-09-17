@@ -1,18 +1,33 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS builder
 
-WORKDIR /app
+ENV VIRTUAL_ENV=/opt/venv
+RUN python -m venv "$VIRTUAL_ENV"
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+WORKDIR /build
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+FROM python:3.12-slim AS runtime
 
-# Run migrations and start server
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
+
+RUN groupadd --system app \
+    && useradd --system --gid app --create-home app
+
+WORKDIR /app
+COPY --from=builder /opt/venv /opt/venv
+COPY --chown=app:app . .
+
+USER app
+
+EXPOSE 8000
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

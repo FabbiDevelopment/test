@@ -2,12 +2,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.tag import Tag
     from app.models.user import User
 
 
@@ -46,11 +47,26 @@ class Todo(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
+    __table_args__ = (
+        Index(
+            "ix_todos_user_created_at_id",
+            user_id,
+            created_at.desc(),
+            id.desc(),
+        ),
+    )
+
     # Relationships
     user: Mapped["User"] = relationship(  # noqa: F821
         "User",
         back_populates="todos",
         lazy="select",
+    )
+    tags: Mapped[list["Tag"]] = relationship(
+        "Tag",
+        secondary="todo_tags",
+        back_populates="todos",
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:

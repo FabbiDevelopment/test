@@ -1,7 +1,13 @@
 """Auth tests."""
 
+import base64
+import json
+from datetime import timedelta
+
 import pytest
 from httpx import AsyncClient
+
+from app.core.security import create_access_token
 
 
 @pytest.mark.asyncio
@@ -56,6 +62,50 @@ async def test_get_current_user(client: AsyncClient):
     assert response.status_code == 200
     data = response.json()
     assert data["email"] == "me@example.com"
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_rejects_expired_jwt(client: AsyncClient):
+    """An expired access token must not grant access to a protected endpoint."""
+    expired_token = create_access_token(
+        data={"sub": "00000000-0000-0000-0000-000000000001"},
+        expires_delta=timedelta(seconds=-1),
+    )
+
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid authentication token"}
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_rejects_tampered_jwt(client: AsyncClient):
+    """A token whose signed payload was changed must be rejected."""
+    registration = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "tampered@example.com", "password": "password123"},
+    )
+    valid_token = registration.json()["access_token"]
+    header, payload, signature = valid_token.split(".")
+
+    padded_payload = payload + "=" * (-len(payload) % 4)
+    claims = json.loads(base64.urlsafe_b64decode(padded_payload))
+    claims["sub"] = "00000000-0000-0000-0000-000000000001"
+    tampered_payload = base64.urlsafe_b64encode(
+        json.dumps(claims, separators=(",", ":")).encode()
+    ).rstrip(b"=").decode()
+    tampered_token = f"{header}.{tampered_payload}.{signature}"
+
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {tampered_token}"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid authentication token"}
 
 
 @pytest.mark.asyncio

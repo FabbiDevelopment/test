@@ -12,8 +12,7 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Test artifacts
-tests/
+# Test artifacts (exclude cache/coverage only)
 .pytest_cache/
 .coverage
 htmlcov/
@@ -23,7 +22,6 @@ test.db
 # Development tools
 .flake8
 pyproject.toml
-pytest.ini
 
 # Secrets & local config
 .env

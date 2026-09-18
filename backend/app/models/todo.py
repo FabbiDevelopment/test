@@ -53,5 +53,9 @@ class Todo(Base):
         lazy="select",
     )
 
+    tags: Mapped[list["Tag"]] = relationship(
+        "Tag", secondary="todo_tags", back_populates="todos", lazy="selectin"
+    )
+
     def __repr__(self) -> str:
         return f"<Todo {self.title}>"

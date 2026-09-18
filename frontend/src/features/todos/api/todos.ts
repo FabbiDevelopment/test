@@ -31,14 +31,11 @@ interface UpdateTodoRequest {
   completed?: boolean;
 }
 
-
-export function useTodos(page: number = 1, size: number = 10000) {
+export function useTodos(page: number = 1, size: number = 100) {
   return useQuery({
-    queryKey: ["todos"],
+    queryKey: ["todos", page, size],
     queryFn: async (): Promise<TodoListResponse> => {
-      const response = await api.get("/todos", {
-        params: { page, size },
-      });
+      const response = await api.get("/todos", { params: { page, size } });
       return response.data;
     },
   });
@@ -60,7 +57,6 @@ export function useCreateTodo() {
   });
 }
 
-
 export function useUpdateTodo() {
   return useMutation({
     mutationFn: async ({
@@ -74,25 +70,29 @@ export function useUpdateTodo() {
       return response.data;
     },
     onMutate: async ({ id, data }) => {
-      // Cancel outgoing queries
       await queryClient.cancelQueries({ queryKey: ["todos"] });
+      const previousTodos = queryClient.getQueriesData<TodoListResponse>({
+        queryKey: ["todos"],
+      });
 
-      // Snapshot previous value
-      const previousTodos = queryClient.getQueryData<TodoListResponse>(["todos"]);
-
-      // Optimistically update
-      if (previousTodos) {
-        queryClient.setQueryData<TodoListResponse>(["todos"], {
-          ...previousTodos,
-          items: previousTodos.items.map((todo) =>
-            todo.id === id ? { ...todo, ...data } : todo
-          ),
-        });
-      }
-
+      queryClient.setQueriesData<TodoListResponse>(
+        { queryKey: ["todos"] },
+        (current) =>
+          current
+            ? {
+                ...current,
+                items: current.items.map((todo) =>
+                  todo.id === id ? { ...todo, ...data } : todo
+                ),
+              }
+            : current
+      );
       return { previousTodos };
     },
-    onError: () => {
+    onError: (_error, _variables, context) => {
+      context?.previousTodos.forEach(([queryKey, data]) => {
+        queryClient.setQueryData(queryKey, data);
+      });
       toast.error("Failed to update todo");
     },
     onSettled: () => {

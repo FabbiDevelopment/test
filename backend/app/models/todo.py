@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.tag import Tag
     from app.models.user import User
 
 
@@ -49,6 +50,12 @@ class Todo(Base):
     # Relationships
     user: Mapped["User"] = relationship(  # noqa: F821
         "User",
+        back_populates="todos",
+        lazy="select",
+    )
+    tags: Mapped[list["Tag"]] = relationship(  # noqa: F821
+        "Tag",
+        secondary="todo_tags",
         back_populates="todos",
         lazy="select",
     )

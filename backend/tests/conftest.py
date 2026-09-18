@@ -1,7 +1,7 @@
 import asyncio
+import fnmatch
 import os
 from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -51,12 +51,46 @@ async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+class FakeRedis:
+    """Minimal in-memory stand-in for RedisClient, used across a whole test.
+
+    Unlike a fresh MagicMock per call, this keeps state so cache-invalidation
+    tests can assert on real get/set/delete/keys behavior instead of just
+    call counts.
+    """
+
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+
+    async def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
+    async def set(self, key: str, value: str, ex: int | None = None) -> None:
+        self.store[key] = value
+
+    async def delete(self, *keys: str) -> None:
+        for key in keys:
+            self.store.pop(key, None)
+
+    async def keys(self, pattern: str) -> list[str]:
+        return [k for k in self.store if fnmatch.fnmatch(k, pattern)]
+
+    async def exists(self, key: str) -> bool:
+        return key in self.store
+
+
+fake_redis = FakeRedis()
+
+
+@pytest.fixture(autouse=True)
+def _reset_fake_redis():
+    fake_redis.store.clear()
+    yield
+    fake_redis.store.clear()
+
+
 def override_get_redis():
-    mock_redis = MagicMock()
-    mock_redis.get = AsyncMock(return_value=None)
-    mock_redis.set = AsyncMock()
-    mock_redis.delete = AsyncMock()
-    return mock_redis
+    return fake_redis
 
 
 app.dependency_overrides[get_db] = override_get_db

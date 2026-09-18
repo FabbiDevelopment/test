@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
+import type { Tag } from "@/features/tags/api/tags";
 
 export interface Todo {
   id: string;
@@ -11,6 +12,7 @@ export interface Todo {
   user_id: string;
   created_at: string;
   updated_at: string;
+  tags: Tag[];
 }
 
 interface TodoListResponse {
@@ -31,17 +33,69 @@ interface UpdateTodoRequest {
   completed?: boolean;
 }
 
+export interface TodoFilters {
+  status?: "completed" | "active";
+  tagId?: string;
+  keyword?: string;
+  dateFrom?: string; // YYYY-MM-DD
+  dateTo?: string; // YYYY-MM-DD
+}
 
-export function useTodos(page: number = 1, size: number = 10000) {
+export const EMPTY_FILTERS: TodoFilters = {};
+
+interface BulkStatusResult {
+  updated_ids: string[];
+  skipped_ids: string[];
+}
+
+// The query key embeds every filter parameter (page/size + all of
+// TodoFilters), so two different filter combinations are cached
+// independently and never collide - per the README's requirement that
+// "Query keys must include all filter parameters."
+export function todosQueryKey(page: number, size: number, filters: TodoFilters) {
+  return [
+    "todos",
+    "list",
+    page,
+    size,
+    filters.status ?? null,
+    filters.tagId ?? null,
+    filters.keyword ?? null,
+    filters.dateFrom ?? null,
+    filters.dateTo ?? null,
+  ] as const;
+}
+
+export function useTodos(
+  page: number = 1,
+  size: number = 20,
+  filters: TodoFilters = EMPTY_FILTERS
+) {
   return useQuery({
-    queryKey: ["todos"],
+    queryKey: todosQueryKey(page, size, filters),
     queryFn: async (): Promise<TodoListResponse> => {
       const response = await api.get("/todos", {
-        params: { page, size },
+        params: {
+          page,
+          size,
+          status: filters.status,
+          tag_id: filters.tagId,
+          keyword: filters.keyword || undefined,
+          date_from: filters.dateFrom || undefined,
+          date_to: filters.dateTo || undefined,
+        },
       });
       return response.data;
     },
+    placeholderData: (previousData) => previousData,
   });
+}
+
+// Any write invalidates every cached filter combination for the "todos"
+// list - TanStack Query's invalidateQueries does prefix matching, so
+// invalidating ["todos", "list"] catches every page/filter variant above.
+function invalidateAllTodoLists() {
+  queryClient.invalidateQueries({ queryKey: ["todos", "list"] });
 }
 
 export function useCreateTodo() {
@@ -51,7 +105,7 @@ export function useCreateTodo() {
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      invalidateAllTodoLists();
       toast.success("Todo created successfully!");
     },
     onError: () => {
@@ -59,7 +113,6 @@ export function useCreateTodo() {
     },
   });
 }
-
 
 export function useUpdateTodo() {
   return useMutation({
@@ -73,30 +126,11 @@ export function useUpdateTodo() {
       const response = await api.put(`/todos/${id}`, data);
       return response.data;
     },
-    onMutate: async ({ id, data }) => {
-      // Cancel outgoing queries
-      await queryClient.cancelQueries({ queryKey: ["todos"] });
-
-      // Snapshot previous value
-      const previousTodos = queryClient.getQueryData<TodoListResponse>(["todos"]);
-
-      // Optimistically update
-      if (previousTodos) {
-        queryClient.setQueryData<TodoListResponse>(["todos"], {
-          ...previousTodos,
-          items: previousTodos.items.map((todo) =>
-            todo.id === id ? { ...todo, ...data } : todo
-          ),
-        });
-      }
-
-      return { previousTodos };
-    },
     onError: () => {
       toast.error("Failed to update todo");
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      invalidateAllTodoLists();
     },
   });
 }
@@ -107,7 +141,7 @@ export function useDeleteTodo() {
       await api.delete(`/todos/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      invalidateAllTodoLists();
       toast.success("Todo deleted successfully!");
     },
     onError: () => {
@@ -128,4 +162,33 @@ export function useToggleTodo() {
       });
     },
   };
+}
+
+export function useBulkUpdateStatus() {
+  return useMutation({
+    mutationFn: async ({
+      todoIds,
+      completed,
+    }: {
+      todoIds: string[];
+      completed: boolean;
+    }): Promise<BulkStatusResult> => {
+      const response = await api.patch("/todos/bulk-status", {
+        todo_ids: todoIds,
+        completed,
+      });
+      return response.data;
+    },
+    onSuccess: (result) => {
+      invalidateAllTodoLists();
+      toast.success(
+        `Updated ${result.updated_ids.length} todo${
+          result.updated_ids.length === 1 ? "" : "s"
+        }${result.skipped_ids.length ? ` (${result.skipped_ids.length} skipped)` : ""}`
+      );
+    },
+    onError: () => {
+      toast.error("Failed to update selected todos");
+    },
+  });
 }

@@ -6,8 +6,10 @@ venv/
 .venv/
 
 # Environment
-# .env
+.env
+.env.prod
 *.env.local
+!.env.prod.example
 
 # IDE
 .vscode/
@@ -31,5 +33,3 @@ docs/ANSWER_KEY.md
 # OS
 .DS_Store
 Thumbs.db
-
-docs/

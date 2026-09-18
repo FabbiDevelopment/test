@@ -1,0 +1,27 @@
+# Version control
+.git
+.gitignore
+
+# Dependencies (installed fresh inside the image)
+node_modules/
+
+# Build output (produced inside the image)
+dist/
+dist-ssr/
+
+# E2E test artifacts - not needed to build/run the app image
+e2e/
+playwright.config.ts
+playwright-report/
+test-results/
+playwright/.cache/
+
+# Secrets - never bake these into an image layer
+.env
+*.env.local
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+*.local

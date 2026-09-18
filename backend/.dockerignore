@@ -1,0 +1,25 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+.venv/
+venv/
+
+# Test artifacts
+test.db
+tests/
+
+# Secrets - never bake these into an image layer
+.env
+*.env.local
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store

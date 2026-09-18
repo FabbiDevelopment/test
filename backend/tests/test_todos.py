@@ -1,7 +1,12 @@
 """Todo tests."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from httpx import AsyncClient
+
+from app.api.deps import get_redis
+from app.main import app
 
 
 async def get_auth_token(client: AsyncClient, email: str = "todo@example.com") -> str:
@@ -120,3 +125,90 @@ async def test_get_single_todo(client: AsyncClient):
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Single Todo"
+
+
+@pytest.mark.asyncio
+async def test_user_cannot_read_update_or_delete_another_users_todo(
+    client: AsyncClient,
+):
+    owner_token = await get_auth_token(client, "owner@example.com")
+    other_token = await get_auth_token(client, "other@example.com")
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Owner only"},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    todo_id = create_response.json()["id"]
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+
+    read_response = await client.get(f"/api/v1/todos/{todo_id}", headers=other_headers)
+    update_response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Stolen"},
+        headers=other_headers,
+    )
+    delete_response = await client.delete(
+        f"/api/v1/todos/{todo_id}", headers=other_headers
+    )
+
+    assert read_response.status_code == 404
+    assert update_response.status_code == 404
+    assert delete_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_partial_update_preserves_description_and_can_toggle_false(
+    client: AsyncClient,
+):
+    token = await get_auth_token(client, "partial@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Original", "description": "Keep this"},
+        headers=headers,
+    )
+    todo_id = create_response.json()["id"]
+
+    completed_response = await client.put(
+        f"/api/v1/todos/{todo_id}", json={"completed": True}, headers=headers
+    )
+    active_response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Renamed", "completed": False},
+        headers=headers,
+    )
+
+    assert completed_response.json()["completed"] is True
+    assert active_response.json()["completed"] is False
+    assert active_response.json()["description"] == "Keep this"
+
+
+@pytest.mark.asyncio
+async def test_todo_mutations_invalidate_current_users_cache(client: AsyncClient):
+    redis = MagicMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.set = AsyncMock()
+    redis.delete_pattern = AsyncMock()
+    previous_override = app.dependency_overrides[get_redis]
+    app.dependency_overrides[get_redis] = lambda: redis
+
+    try:
+        token = await get_auth_token(client, "cache@example.com")
+        headers = {"Authorization": f"Bearer {token}"}
+        create_response = await client.post(
+            "/api/v1/todos", json={"title": "Cached"}, headers=headers
+        )
+        todo = create_response.json()
+        pattern = f"todos:{todo['user_id']}:*"
+
+        await client.put(
+            f"/api/v1/todos/{todo['id']}",
+            json={"completed": True},
+            headers=headers,
+        )
+        await client.delete(f"/api/v1/todos/{todo['id']}", headers=headers)
+
+        assert redis.delete_pattern.await_count == 3
+        redis.delete_pattern.assert_awaited_with(pattern)
+    finally:
+        app.dependency_overrides[get_redis] = previous_override

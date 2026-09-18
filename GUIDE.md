@@ -149,10 +149,15 @@ pytest tests/ -v
 ```
 
 ### Frontend E2E Tests (Playwright)
-Once set up, run your Playwright suite against the running frontend:
+Install the Chromium browser once, then run the isolated E2E suite. The backend Python environment must be active; the suite starts its own SQLite-backed API and frontend servers:
 ```bash
-# In your E2E / frontend directory:
-npx playwright test
+source backend/.venv/bin/activate  # or activate your backend virtualenv
+cd frontend
+npx playwright install chromium
+npm run e2e
+
+# Interactive browser mode
+npm run e2e:headed
 ```
 
 ### Database Performance Benchmarking
@@ -164,4 +169,3 @@ Connect to PostgreSQL container to run `EXPLAIN ANALYZE`:
 ```bash
 docker compose exec postgres psql -U fabbi -d postgres
 ```
-

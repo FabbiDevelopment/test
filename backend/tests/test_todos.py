@@ -120,3 +120,102 @@ async def test_get_single_todo(client: AsyncClient):
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Single Todo"
+
+
+@pytest.mark.asyncio
+async def test_user_cannot_access_another_users_todo(client: AsyncClient):
+    owner_token = await get_auth_token(client, "owner@example.com")
+    other_token = await get_auth_token(client, "other@example.com")
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Private todo"},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    todo_id = create_response.json()["id"]
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+
+    get_response = await client.get(f"/api/v1/todos/{todo_id}", headers=other_headers)
+    update_response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Stolen"},
+        headers=other_headers,
+    )
+    delete_response = await client.delete(
+        f"/api/v1/todos/{todo_id}", headers=other_headers
+    )
+
+    assert get_response.status_code == 404
+    assert update_response.status_code == 404
+    assert delete_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_completed_can_be_changed_from_true_to_false(client: AsyncClient):
+    token = await get_auth_token(client, "toggle@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    create_response = await client.post(
+        "/api/v1/todos", json={"title": "Toggle me"}, headers=headers
+    )
+    todo_id = create_response.json()["id"]
+
+    await client.put(
+        f"/api/v1/todos/{todo_id}", json={"completed": True}, headers=headers
+    )
+    response = await client.put(
+        f"/api/v1/todos/{todo_id}", json={"completed": False}, headers=headers
+    )
+
+    assert response.status_code == 200
+    assert response.json()["completed"] is False
+
+
+@pytest.mark.asyncio
+async def test_partial_title_update_preserves_description(client: AsyncClient):
+    token = await get_auth_token(client, "partial@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Old title", "description": "Keep this"},
+        headers=headers,
+    )
+    todo_id = create_response.json()["id"]
+
+    response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "New title"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "New title"
+    assert response.json()["description"] == "Keep this"
+
+
+@pytest.mark.asyncio
+async def test_todo_cache_is_scoped_and_invalidated(
+    client: AsyncClient, redis_mock
+):
+    token = await get_auth_token(client, "cache@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me_response = await client.get("/api/v1/auth/me", headers=headers)
+    user_id = me_response.json()["id"]
+    await client.get("/api/v1/todos?page=2&size=10", headers=headers)
+    redis_mock.set.assert_awaited_once()
+    cache_key = redis_mock.set.await_args.args[0]
+    assert cache_key == f"todos:list:{user_id}:2:10"
+
+    redis_mock.delete_pattern.reset_mock()
+    create_response = await client.post(
+        "/api/v1/todos", json={"title": "Cache invalidation"}, headers=headers
+    )
+    todo_id = create_response.json()["id"]
+    await client.put(
+        f"/api/v1/todos/{todo_id}", json={"completed": True}, headers=headers
+    )
+    await client.delete(f"/api/v1/todos/{todo_id}", headers=headers)
+
+    expected_pattern = f"todos:list:{user_id}:*"
+    assert redis_mock.delete_pattern.await_count == 3
+    for call in redis_mock.delete_pattern.await_args_list:
+        assert call.args == (expected_pattern,)

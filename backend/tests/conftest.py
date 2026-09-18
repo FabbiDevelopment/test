@@ -1,4 +1,3 @@
-import asyncio
 import os
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
@@ -6,30 +5,28 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 # Use SQLite for tests before app modules initialize their default engine.
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
-from app.api.deps import get_redis
-from app.core.security import create_access_token
-from app.db.base import Base
-from app.db.session import get_db
-from app.main import app
+from app.api.deps import get_redis  # noqa: E402
+from app.core.security import create_access_token  # noqa: E402
+from app.db.base import Base  # noqa: E402
+from app.db.session import get_db  # noqa: E402
+from app.main import app  # noqa: E402
 
-test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+test_engine = create_async_engine(
+    TEST_DATABASE_URL,
+    echo=False,
+    poolclass=StaticPool,
+)
 test_session_maker = async_sessionmaker(
     test_engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest.fixture(autouse=True)
@@ -51,11 +48,21 @@ async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+mock_redis = MagicMock()
+mock_redis.get = AsyncMock(return_value=None)
+mock_redis.set = AsyncMock()
+mock_redis.delete = AsyncMock()
+mock_redis.delete_pattern = AsyncMock()
+
+
 def override_get_redis():
-    mock_redis = MagicMock()
-    mock_redis.get = AsyncMock(return_value=None)
-    mock_redis.set = AsyncMock()
-    mock_redis.delete = AsyncMock()
+    return mock_redis
+
+
+@pytest.fixture
+def redis_mock():
+    mock_redis.reset_mock()
+    mock_redis.get.return_value = None
     return mock_redis
 
 

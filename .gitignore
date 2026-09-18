@@ -32,4 +32,6 @@ docs/ANSWER_KEY.md
 .DS_Store
 Thumbs.db
 
-docs/
+# Playwright artifacts
+frontend/playwright-report/
+frontend/test-results/

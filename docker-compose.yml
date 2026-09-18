@@ -6,14 +6,24 @@ services:
       POSTGRES_PASSWORD: fabbi_secret
       POSTGRES_DB: postgres
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fabbi -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   backend:
     build:
@@ -29,8 +39,15 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       REFRESH_TOKEN_EXPIRE_DAYS: 7
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   frontend:
     build:
@@ -41,7 +58,8 @@ services:
     environment:
       VITE_API_URL: http://localhost:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres_data:

@@ -11,8 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+RUN useradd --create-home appuser
+
 # Copy application code
-COPY . .
+COPY --chown=appuser:appuser . .
+
+USER appuser
 
 # Run migrations and start server
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

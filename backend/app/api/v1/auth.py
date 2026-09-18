@@ -10,6 +10,7 @@ from app.schemas.user import (
     RefreshTokenRequest,
     TokenResponse,
     UserCreate,
+    UserLogin,
     UserResponse,
 )
 from app.services.auth_service import create_user, get_user_by_email
@@ -45,24 +46,18 @@ async def register(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
-    user_data: UserCreate,
+    user_data: UserLogin,
     db: AsyncSession = Depends(get_db),
 ):
     """Authenticate user and return tokens."""
     user = await get_user_by_email(db, user_data.email)
 
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User with this email not found",
-        )
-
     from app.core.security import verify_password
 
-    if not verify_password(user_data.password, user.hashed_password):
+    if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password",
+            detail="Invalid email or password",
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
@@ -90,6 +85,11 @@ async def refresh_token(
         )
 
     user_id = payload.get("sub")
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
     access_token = create_access_token(data={"sub": user_id})
     refresh_token = create_refresh_token(data={"sub": user_id})
 

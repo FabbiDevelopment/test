@@ -79,9 +79,11 @@ async def create_new_todo(
     todo_data: TodoCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis: RedisClient = Depends(get_redis),
 ):
     """Create a new todo item."""
     todo = await create_todo(db, todo_data, current_user.id)
+    await redis.delete_by_pattern(f"todos:list:{current_user.id}:*")
     return todo
 
 
@@ -128,7 +130,7 @@ async def update_existing_todo(
             detail="Not authorized to update this todo",
         )
 
-    update_data = todo_data.model_dump()
+    update_data = todo_data.model_dump(exclude_unset=True)
 
     if todo_data.completed is not None:
         todo.completed = todo_data.completed
@@ -140,6 +142,7 @@ async def update_existing_todo(
         todo.description = update_data["description"]
 
     updated_todo = await update_todo(db, todo, {})
+    await redis.delete_by_pattern(f"todos:list:{current_user.id}:*")
 
     return updated_todo
 
@@ -165,5 +168,6 @@ async def delete_existing_todo(
         )
 
     await delete_todo(db, todo)
+    await redis.delete_by_pattern(f"todos:list:{current_user.id}:*")
 
     return None

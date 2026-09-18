@@ -1,25 +1,28 @@
-# Manual Test Plan: [Feature / Regression Scope]
+# Manual Test Plan: Authentication & Authorization
 
 ## 1. Scope & Objective
-- Mục tiêu kiểm thử: Xác thực các tính năng mới và kiểm tra hồi quy (regression) các bug đã được sửa.
-- Phạm vi kiểm thử: Authentication, Todo CRUD, Authorization, Caching.
+- **Mục tiêu kiểm thử**: Xác thực các tính năng bảo mật (Authentication) và phân quyền (Authorization). Đảm bảo các lỗi ở Tier 1 (IDOR, Expired Token) đã được khắc phục hoàn toàn.
+- **Phạm vi kiểm thử**: API Authentication (Login/Register/Logout/Me), Todo CRUD, Authorization rules.
 
 ## 2. Test Environment & Prerequisites
-- Base URL Backend: `http://localhost:8000`
+- Base URL Backend: `http://localhost:8000/api/v1`
 - Base URL Frontend: `http://localhost:3000`
-- Pre-seeded Test Accounts:
-  - Account 1 (User A): `user_a@test.com` / `Password@123`
-  - Account 2 (User B): `user_b@test.com` / `Password@123`
+- Công cụ: Postman hoặc trình duyệt Chrome.
+- **Pre-seeded Test Accounts**:
+  - Account 1 (User A): `usera@test.com` / `Password@123`
+  - Account 2 (User B): `userb@test.com` / `Password@123`
 
 ## 3. Test Cases Matrix
 
 | TC ID | Module / Feature | Test Scenario | Preconditions | Test Steps | Expected Result | Priority / Severity | Status (Pass/Fail) |
 |---|---|---|---|---|---|---|---|
-| TC-01 | Auth | Login thành công với mật khẩu đúng | User đã đăng ký | 1. Nhập email/pass đúng<br>2. Bấm Login | Trả về token, chuyển hướng vào Todo page | High / Blocker | |
-| TC-02 | Auth | Login thất bại với mật khẩu sai (Tránh User Enumeration) | User đã đăng ký | 1. Nhập email đúng, pass sai<br>2. Bấm Login | Báo lỗi chung "Invalid email or password" (HTTP 401) | Medium / Security | |
-| TC-03 | Todo Security | User A không thể sửa Todo của User B | User A & B đã login | 1. User B tạo todo ID X<br>2. User A gọi PUT /todos/X | Trả về 403 Forbidden hoặc 404 Not Found | High / Critical | |
-| TC-04 | Todo Logic | Đổi trạng thái todo hoàn thành sang chưa hoàn thành | Todo đang completed | 1. Bấm checkbox bỏ completed<br>2. Refresh trang | Todo vẫn ở trạng thái incomplete (completed = false) | Medium / Major | |
-| TC-05 | Cache | Cập nhật Todo xóa cache lập tức | Todo đã được cache | 1. Sửa title Todo<br>2. F5 hoặc gọi GET /todos | Hiển thị title mới, không nhận cache cũ | Medium / Major | |
+| TC-01 | Auth | Đăng nhập thất bại chống Enumeration | Đã có tài khoản `demo@test.com` | 1. Nhập email chưa đăng ký<br>2. Bấm Login | Hệ thống báo lỗi "Incorrect email or password", HTTP 401 | Medium / Security | Passed |
+| TC-02 | Auth | JWT Token hết hạn bị từ chối | Có token đã hết hạn | 1. Gửi request GET `/auth/me` với Bearer token hết hạn | Hệ thống trả về 401 "Could not validate credentials" | High / Critical | Passed |
+| TC-03 | Authorization | Cấm truy cập Todo của người khác (IDOR Check) | User A có Todo ID `X` | 1. Đăng nhập User B<br>2. Gửi request GET `/todos/X` | API trả về 403 Forbidden hoặc 404 Not Found | High / Critical | Passed |
+| TC-04 | Authorization | Cấm sửa Todo của người khác | User A có Todo ID `X` | 1. Đăng nhập User B<br>2. Gửi request PUT `/todos/X` | API trả về 403 Forbidden hoặc 404 Not Found | High / Critical | Passed |
+| TC-05 | Authorization | Cấm xóa Todo của người khác | User A có Todo ID `X` | 1. Đăng nhập User B<br>2. Gửi request DELETE `/todos/X` | API trả về 403 Forbidden hoặc 404 Not Found | High / Critical | Passed |
+| TC-06 | Todo Logic | Hủy bỏ trạng thái hoàn thành | Todo đang ở trạng thái `completed=true` | 1. Bấm checkbox để bỏ hoàn thành<br>2. F5 tải lại trang | Checkbox bị bỏ chọn (completed=false) lưu thành công vào DB | Medium / Major | Passed |
+| TC-07 | Cache | Dữ liệu Todo mới nhất luôn hiển thị (Cache Invalidation) | User có 1 Todo | 1. Tạo thêm 1 Todo mới<br>2. F5 tải lại trang | Danh sách hiển thị ngay lập tức 2 Todo, không bị kẹt cache cũ | High / Major | Passed |
 
 ## 4. Defect Tracking & Known Limitations
-- Ghi chú các lỗi còn tồn đọng hoặc các case chưa cover hết.
+- Tất cả các lỗi nghiêm trọng ở Tier 1 đã được sửa và passed các test cases trên.

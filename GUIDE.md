@@ -61,6 +61,24 @@ The application will be available at:
   - Email: `demo@test.com`
   - Password: `Demo@123`
 
+Compose waits for PostgreSQL and Redis healthchecks before starting the API, and waits for the API before starting the frontend. Redis authentication is configured through `REDIS_PASSWORD`.
+
+### Production Compose
+
+The production overlay removes public PostgreSQL/Redis ports, disables SQL echo, requires secrets, enables restart policies, and uses the optimized runtime images:
+
+```bash
+export POSTGRES_USER=fabbi
+export POSTGRES_PASSWORD='<strong-random-password>'
+export POSTGRES_DB=postgres
+export REDIS_PASSWORD='<strong-random-password>'
+export JWT_SECRET='<at-least-32-random-bytes>'
+
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Do not commit production values. Supply them using the deployment platform's secret manager.
+
 By default the seed command creates 100 users and 1,000 TODOs so the assessment is quick to set up. To test performance with a larger dataset, pass seed variables explicitly:
 
 ```bash
@@ -165,3 +183,4 @@ Connect to PostgreSQL container to run `EXPLAIN ANALYZE`:
 docker compose exec postgres psql -U fabbi -d postgres
 ```
 
+The repeatable before/after query script and captured million-row results are documented in [`docs/DATABASE_INDEX_BENCHMARK.md`](docs/DATABASE_INDEX_BENCHMARK.md).

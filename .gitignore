@@ -16,6 +16,8 @@ venv/
 # Build
 dist/
 build/
+frontend/playwright-report/
+frontend/test-results/
 
 # Test
 test.db
@@ -31,5 +33,3 @@ docs/ANSWER_KEY.md
 # OS
 .DS_Store
 Thumbs.db
-
-docs/

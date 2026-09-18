@@ -16,6 +16,8 @@ venv/
 # Build
 dist/
 build/
+frontend/playwright-report/
+frontend/test-results/
 
 # Test
 test.db

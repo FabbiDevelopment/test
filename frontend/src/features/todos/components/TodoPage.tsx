@@ -3,14 +3,18 @@ import { Plus, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useTodos } from "../api/todos";
+import { defaultTodoFilters, useTags, useTodos, type TodoFilters } from "../api/todos";
 import { TodoList } from "./TodoList";
 import { TodoForm } from "./TodoForm";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { TodoFilterBar } from "./TodoFilterBar";
+import { TagManager } from "./TagManager";
 
 export function TodoPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const { data, isLoading, error } = useTodos();
+  const [filters, setFilters] = useState<TodoFilters>(defaultTodoFilters);
+  const { data, isLoading, error } = useTodos(filters);
+  const { data: tags = [] } = useTags();
   const { user, logout } = useAuth();
 
   return (
@@ -33,6 +37,7 @@ export function TodoPage() {
 
       {/* Main content */}
       <main className="max-w-3xl mx-auto px-4 py-8">
+        <TagManager tags={tags} />
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg">My Todos</CardTitle>
@@ -43,6 +48,7 @@ export function TodoPage() {
           </CardHeader>
           <Separator />
           <CardContent className="pt-4">
+            <TodoFilterBar filters={filters} tags={tags} onChange={setFilters} />
             {isLoading && (
               <div className="text-center py-12 text-muted-foreground">
                 Loading todos...
@@ -55,7 +61,7 @@ export function TodoPage() {
               </div>
             )}
 
-            {data && <TodoList todos={data.items} />}
+            {data && <TodoList todos={data.items} tags={tags} />}
 
             {data && data.total > 0 && (
               <div className="mt-4 text-center text-sm text-muted-foreground">

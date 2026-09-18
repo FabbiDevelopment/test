@@ -9,6 +9,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.todo import Todo
+    from app.models.tag import Tag
 
 
 class User(Base):
@@ -21,6 +22,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
+        unique=True,
     )
     hashed_password: Mapped[str] = mapped_column(
         String(255),
@@ -34,6 +36,11 @@ class User(Base):
     # Relationships
     todos: Mapped[list["Todo"]] = relationship(  # noqa: F821
         "Todo",
+        back_populates="user",
+        lazy="select",
+    )
+    tags: Mapped[list["Tag"]] = relationship(  # noqa: F821
+        "Tag",
         back_populates="user",
         lazy="select",
     )

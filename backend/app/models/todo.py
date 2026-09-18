@@ -9,6 +9,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.user import User
+    from app.models.tag import TodoTag
 
 
 class Todo(Base):
@@ -50,6 +51,12 @@ class Todo(Base):
     user: Mapped["User"] = relationship(  # noqa: F821
         "User",
         back_populates="todos",
+        lazy="select",
+    )
+    todo_tags: Mapped[list["TodoTag"]] = relationship(  # noqa: F821
+        "TodoTag",
+        back_populates="todo",
+        cascade="all, delete-orphan",
         lazy="select",
     )
 

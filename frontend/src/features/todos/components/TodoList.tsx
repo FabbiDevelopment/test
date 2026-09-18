@@ -2,61 +2,23 @@ import { useState } from "react";
 import { TodoItem } from "./TodoItem";
 import { TodoForm } from "./TodoForm";
 import type { Todo } from "../api/todos";
-import { useDeleteTodo, useToggleTodo } from "../api/todos";
+import { useDeleteTodo, useUpdateTodo } from "../api/todos";
 
-interface TodoListProps {
-  todos: Todo[];
-}
-
-export function TodoList({ todos }: TodoListProps) {
-  const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
-  const deleteTodo = useDeleteTodo();
-  const toggleTodo = useToggleTodo();
-
-  const handleToggle = (todo: Todo) => {
-    toggleTodo.mutate(todo);
-  };
-
-  const handleEdit = (todo: Todo) => {
-    setEditingTodo(todo);
-  };
-
-  const handleDelete = (id: string) => {
-    deleteTodo.mutate(id);
-  };
-
-  if (todos.length === 0) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        <p className="text-lg">No todos yet</p>
-        <p className="text-sm mt-1">Create your first todo to get started</p>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <div className="space-y-2">
-        {todos.map((todo, index) => (
-          <TodoItem
-            key={index}
-            todo={todo}
-            index={index}
-            onToggle={handleToggle}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
-        ))}
-      </div>
-
-      {editingTodo && (
-        <TodoForm
-          mode="edit"
-          todo={editingTodo}
-          open={!!editingTodo}
-          onClose={() => setEditingTodo(null)}
-        />
-      )}
-    </>
-  );
+export function TodoList({ todos, selectedIds, onSelectChange, onDelete, busy }: {
+  todos: Todo[]; selectedIds: Set<string>; onSelectChange: (id: string, checked: boolean) => void;
+  onDelete: () => void; busy: boolean;
+}) {
+  const [editing, setEditing] = useState<Todo | null>(null);
+  const remove = useDeleteTodo(), update = useUpdateTodo();
+  return <>
+    {todos.length === 0 && <p className="py-8 text-center" role="status">No todos match your filters.</p>}
+    <div className="space-y-2">
+      {todos.map((todo) => <TodoItem key={todo.id} todo={todo} selected={selectedIds.has(todo.id)}
+        pending={busy || remove.isPending || update.isPending}
+        onSelectChange={(checked) => onSelectChange(todo.id, checked)}
+        onToggle={() => update.mutate({ id: todo.id, data: { completed: !todo.completed } })}
+        onEdit={() => setEditing(todo)} onDelete={() => remove.mutate(todo.id, { onSuccess: onDelete })} />)}
+    </div>
+    {editing && <TodoForm mode="edit" todo={editing} open onClose={() => setEditing(null)} />}
+  </>;
 }

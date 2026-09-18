@@ -1,0 +1,44 @@
+# Backend .dockerignore
+# Excludes development artifacts to keep the image small and clean
+
+# Python virtual environment
+venv/
+.venv/
+env/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Test artifacts (exclude cache/coverage only)
+.pytest_cache/
+.coverage
+htmlcov/
+test.db
+*.db
+
+# Development tools
+.flake8
+pyproject.toml
+
+# Secrets & local config
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+
+# Docker files (not needed inside the image)
+Dockerfile
+.dockerignore
+
+# Editor & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store

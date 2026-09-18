@@ -8,6 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { useCreateTodo, useUpdateTodo } from "../api/todos";
 import { todoSchema, type TodoFormData } from "../schemas/todo";
@@ -66,6 +67,7 @@ export function TodoForm({ mode, todo, open, onClose }: TodoFormProps) {
           <DialogTitle>
             {mode === "create" ? "Create Todo" : "Edit Todo"}
           </DialogTitle>
+          <DialogDescription>Enter a title and optional description.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

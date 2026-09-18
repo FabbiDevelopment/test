@@ -1,13 +1,19 @@
+# Stage 1: Build React App
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine
-WORKDIR /app
-RUN npm install -g serve
-COPY --from=build /app/dist ./dist
+# Stage 2: Serve with Nginx (Slim)
+FROM nginx:alpine
+# Remove default nginx static assets
+RUN rm -rf /usr/share/nginx/html/*
+# Copy custom nginx config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy static build from Stage 1
+COPY --from=build /app/dist /usr/share/nginx/html
+
 EXPOSE 3000
-CMD ["serve", "-s", "dist", "-l", "3000"]
+CMD ["nginx", "-g", "daemon off;"]

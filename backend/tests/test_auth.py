@@ -75,3 +75,37 @@ async def test_logout(client: AsyncClient):
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Successfully logged out"
+
+
+@pytest.mark.asyncio
+async def test_jwt_expired_rejection(client: AsyncClient):
+    """Test that expired JWT tokens are rejected with 401."""
+    # We create a token with a negative expiration time to simulate an expired token
+    from app.core.security import create_access_token
+    from datetime import timedelta
+    
+    token = create_access_token(data={"sub": "test@example.com"}, expires_delta=timedelta(minutes=-10))
+    
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid authentication token"
+
+
+@pytest.mark.asyncio
+async def test_jwt_tampered_rejection(client: AsyncClient):
+    """Test that tampered JWT tokens are rejected with 401."""
+    from app.core.security import create_access_token
+    
+    token = create_access_token(data={"sub": "test@example.com"})
+    # Tamper with the token (change the last character of the signature)
+    tampered_token = token[:-1] + ("a" if token[-1] != "a" else "b")
+    
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {tampered_token}"},
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid authentication token"

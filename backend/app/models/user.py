@@ -9,6 +9,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.todo import Todo
+    from app.models.tag import Tag
 
 
 class User(Base):
@@ -32,11 +33,20 @@ class User(Base):
     )
 
     # Relationships
-    todos: Mapped[list["Todo"]] = relationship(  # noqa: F821
+    todos: Mapped[list["Todo"]] = relationship(
         "Todo",
         back_populates="user",
         lazy="select",
     )
 
+    # Danh sách các Tag do người dùng sở hữu (tự động xóa tag khi xóa user)
+    tags: Mapped[list["Tag"]] = relationship(
+        "Tag",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
     def __repr__(self) -> str:
         return f"<User {self.email}>"
+
+

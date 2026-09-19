@@ -67,3 +67,4 @@ watchfiles==1.2.0
 websockets==16.0
 black==26.5.0
 flake8==7.3.0
+pytest

@@ -9,6 +9,10 @@ venv/
 # .env
 *.env.local
 
+# Test artifacts
+playwright-report/
+test-results/
+
 # IDE
 .vscode/
 .idea/
@@ -31,5 +35,3 @@ docs/ANSWER_KEY.md
 # OS
 .DS_Store
 Thumbs.db
-
-docs/

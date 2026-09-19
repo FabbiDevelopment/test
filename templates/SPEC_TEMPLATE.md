@@ -35,10 +35,9 @@
   - Các index cần đánh để tối ưu truy vấn.
 
 ## 5. API Contracts & Endpoints
-| Method | Endpoint | Description | Auth Required |
-|---|---|---|---|
-| POST | `/api/v1/...` | ... | Yes |
-| GET | `/api/v1/...` | ... | Yes |
+| Method | Endpoint      | Description | Auth Required |
+| POST   | `/api/v1/...` | ...         | Yes |
+| GET    | `/api/v1/...` | ...         | Yes |
 
 - **Request Body & Validation Schema** (Pydantic / JSON format).
 - **Responses & Error Codes** (200, 201, 400, 403, 404, 422).

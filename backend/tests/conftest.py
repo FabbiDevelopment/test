@@ -8,7 +8,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # Use SQLite for tests before app modules initialize their default engine.
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+TEST_DATABASE_URL = "sqlite+aiosqlite:////tmp.test.db"
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from app.api.deps import get_redis

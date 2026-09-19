@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.tag import TagResponse
+
 
 class TodoCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
@@ -15,6 +17,11 @@ class TodoUpdate(BaseModel):
     completed: bool | None = None
 
 
+class BulkStatusUpdate(BaseModel):
+    todo_ids: list[uuid.UUID]
+    completed: bool
+
+
 class TodoResponse(BaseModel):
     id: uuid.UUID
     title: str
@@ -24,6 +31,7 @@ class TodoResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     user_email: str | None = None
+    tags: list[TagResponse] = []
 
     model_config = {"from_attributes": True}
 

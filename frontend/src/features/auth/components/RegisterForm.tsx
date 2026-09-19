@@ -1,13 +1,13 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useNavigate } from "react-router-dom";
-import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRegister } from "../api/auth";
 import { registerSchema, type RegisterFormData } from "../schemas/auth";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 export function RegisterForm() {
   const navigate = useNavigate();
@@ -30,10 +30,9 @@ export function RegisterForm() {
           navigate("/");
         },
         onError: (error: unknown) => {
-          const message = isAxiosError<{ detail?: string }>(error)
-            ? error.response?.data?.detail
-            : undefined;
-          toast.error(message || "Registration failed. Please try again.");
+          toast.error(
+            getApiErrorMessage(error, "Registration failed. Please try again."),
+          );
         },
       }
     );

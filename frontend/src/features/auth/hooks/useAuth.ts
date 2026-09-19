@@ -22,13 +22,7 @@ export function useAuth() {
 
   const logout = () => {
     logoutMutation.mutate(undefined, {
-      onSuccess: () => {
-        navigate("/login");
-      },
-      onError: () => {
-        // Even on error, clear local tokens and redirect
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
+      onSettled: () => {
         navigate("/login");
       },
     });

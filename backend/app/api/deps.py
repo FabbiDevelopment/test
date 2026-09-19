@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.redis import redis_client
+from app.core.redis import RedisClient, redis_client
 from app.core.security import verify_token
 from app.db.session import get_db
 from app.models.user import User
@@ -13,10 +13,14 @@ from app.services.auth_service import get_user_by_id
 security_scheme = HTTPBearer()
 
 
-async def get_current_user(
+def get_redis() -> RedisClient:
+    return redis_client
+
+
+async def get_current_access_token(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
-    db: AsyncSession = Depends(get_db),
-) -> User:
+    redis: RedisClient = Depends(get_redis),
+) -> dict:
     token = credentials.credentials
     payload = verify_token(token)
 
@@ -26,19 +30,47 @@ async def get_current_user(
             detail="Invalid authentication token",
         )
 
-    user_id = payload.get("sub")
-    if user_id is None:
+    if payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+        )
+
+    session_id = payload.get("sid")
+    if not isinstance(session_id, str):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
 
     try:
-        user_uuid = uuid.UUID(user_id)
+        uuid.UUID(session_id)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user ID in token",
+            detail="Invalid token payload",
+        )
+
+    if await redis.is_session_revoked(session_id):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+        )
+
+    return payload
+
+
+async def get_current_user(
+    payload: dict = Depends(get_current_access_token),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    user_id = payload.get("sub")
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
         )
 
     user = await get_user_by_id(db, user_uuid)
@@ -49,7 +81,3 @@ async def get_current_user(
         )
 
     return user
-
-
-def get_redis():
-    return redis_client

@@ -2,20 +2,29 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Precomputed bcrypt hash for unknown-account login attempts. Verifying it keeps
+# the public failure path close to the timing of a real password verification.
+DUMMY_PASSWORD_HASH = "$2b$12$PsKgCHXE5O6NEVp6e4wRKO7.hDAuoHpekp1zosL6O6aKcRT1Llsb2"
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a password against an existing bcrypt hash."""
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+        )
+    except ValueError:
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    """Create a bcrypt hash compatible with hashes stored by the old Passlib path."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
@@ -38,7 +47,9 @@ def create_refresh_token(data: dict, expires_delta: timedelta | None = None) -> 
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        expire = datetime.now(timezone.utc) + timedelta(
+            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+        )
     to_encode.update({"exp": expire, "type": "refresh", "jti": str(uuid.uuid4())})
     encoded_jwt = jwt.encode(
         to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
@@ -53,8 +64,20 @@ def verify_token(token: str) -> dict[str, Any] | None:
             token,
             settings.JWT_SECRET,
             algorithms=[settings.JWT_ALGORITHM],
-            options={"verify_exp": False},
+            options={
+                "verify_exp": True,
+                "require_exp": True,
+                "require_sub": True,
+            },
         )
+        if "type" not in payload:
+            return None
         return payload
     except JWTError:
         return None
+
+
+def token_remaining_seconds(payload: dict[str, Any]) -> int:
+    """Return the remaining JWT lifetime rounded up to a positive TTL."""
+    expires_at = datetime.fromtimestamp(int(payload["exp"]), tz=timezone.utc)
+    return max(1, int((expires_at - datetime.now(timezone.utc)).total_seconds()) + 1)

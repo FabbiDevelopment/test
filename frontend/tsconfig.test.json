@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "rootDir": ".",
+    "outDir": ".test-dist"
+  },
+  "include": [
+    "tests/**/*.test.ts",
+    "src/features/todos/api/queryKeys.ts",
+    "src/features/todos/api/mutationHandlers.ts",
+    "src/lib/authErrorHandling.ts",
+    "src/lib/sessionCleanup.ts"
+  ]
+}

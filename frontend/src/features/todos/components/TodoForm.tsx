@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -37,6 +39,15 @@ export function TodoForm({ mode, todo, open, onClose }: TodoFormProps) {
     },
   });
 
+  useEffect(() => {
+    if (open) {
+      reset({
+        title: todo?.title ?? "",
+        description: todo?.description ?? "",
+      });
+    }
+  }, [open, reset, todo]);
+
   const onSubmit = (data: TodoFormData) => {
     if (mode === "create") {
       createTodo.mutate(data, {
@@ -47,7 +58,7 @@ export function TodoForm({ mode, todo, open, onClose }: TodoFormProps) {
       });
     } else if (todo) {
       updateTodo.mutate(
-        { id: todo.id, data },
+        { id: todo.id, userId: todo.user_id, data },
         {
           onSuccess: () => {
             onClose();
@@ -66,6 +77,11 @@ export function TodoForm({ mode, todo, open, onClose }: TodoFormProps) {
           <DialogTitle>
             {mode === "create" ? "Create Todo" : "Edit Todo"}
           </DialogTitle>
+          <DialogDescription>
+            {mode === "create"
+              ? "Add a title and optional details for your new Todo."
+              : "Update the title or details for this Todo."}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

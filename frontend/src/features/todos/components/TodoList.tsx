@@ -1,15 +1,23 @@
 import { useState } from "react";
 import { TodoItem } from "./TodoItem";
 import { TodoForm } from "./TodoForm";
+import { TodoTagDialog } from "./TodoTagDialog";
 import type { Todo } from "../api/todos";
 import { useDeleteTodo, useToggleTodo } from "../api/todos";
 
 interface TodoListProps {
   todos: Todo[];
+  selectedTodoIds: string[];
+  onSelectionChange: (todoIds: string[]) => void;
 }
 
-export function TodoList({ todos }: TodoListProps) {
+export function TodoList({
+  todos,
+  selectedTodoIds,
+  onSelectionChange,
+}: TodoListProps) {
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
+  const [taggingTodoId, setTaggingTodoId] = useState<string | null>(null);
   const deleteTodo = useDeleteTodo();
   const toggleTodo = useToggleTodo();
 
@@ -21,8 +29,20 @@ export function TodoList({ todos }: TodoListProps) {
     setEditingTodo(todo);
   };
 
-  const handleDelete = (id: string) => {
-    deleteTodo.mutate(id);
+  const taggingTodo = todos.find((todo) => todo.id === taggingTodoId) ?? null;
+
+  const handleDelete = (todo: Todo) => {
+    deleteTodo.mutate({ id: todo.id, userId: todo.user_id });
+  };
+
+  const handleSelection = (todoId: string, selected: boolean) => {
+    const selectedIds = new Set(selectedTodoIds);
+    if (selected) {
+      selectedIds.add(todoId);
+    } else {
+      selectedIds.delete(todoId);
+    }
+    onSelectionChange([...selectedIds]);
   };
 
   if (todos.length === 0) {
@@ -37,12 +57,14 @@ export function TodoList({ todos }: TodoListProps) {
   return (
     <>
       <div className="space-y-2">
-        {todos.map((todo, index) => (
+        {todos.map((todo) => (
           <TodoItem
-            key={index}
+            key={todo.id}
             todo={todo}
-            index={index}
+            selected={selectedTodoIds.includes(todo.id)}
+            onSelect={handleSelection}
             onToggle={handleToggle}
+            onManageTags={setTaggingTodoId}
             onEdit={handleEdit}
             onDelete={handleDelete}
           />
@@ -57,6 +79,7 @@ export function TodoList({ todos }: TodoListProps) {
           onClose={() => setEditingTodo(null)}
         />
       )}
+      <TodoTagDialog todo={taggingTodo} onClose={() => setTaggingTodoId(null)} />
     </>
   );
 }

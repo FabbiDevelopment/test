@@ -6,7 +6,7 @@ venv/
 .venv/
 
 # Environment
-# .env
+.env
 *.env.local
 
 # IDE
@@ -32,4 +32,6 @@ docs/ANSWER_KEY.md
 .DS_Store
 Thumbs.db
 
-docs/
+# Playwright
+frontend/playwright-report/
+frontend/test-results/

@@ -1,7 +1,6 @@
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -51,16 +50,41 @@ async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+class FakeRedis:
+    def __init__(self):
+        self._store: dict[str, str] = {}
+
+    async def get(self, key: str) -> str | None:
+        return self._store.get(key)
+
+    async def set(self, key: str, value: str, ex: int | None = None):
+        self._store[key] = value
+
+    async def delete(self, key: str):
+        self._store.pop(key, None)
+
+    async def delete_pattern(self, pattern: str):
+        prefix = pattern.rstrip("*")
+        keys_to_delete = [k for k in self._store if k.startswith(prefix)]
+        for k in keys_to_delete:
+            self._store.pop(k, None)
+
+
+_fake_redis_instance = FakeRedis()
+
+
 def override_get_redis():
-    mock_redis = MagicMock()
-    mock_redis.get = AsyncMock(return_value=None)
-    mock_redis.set = AsyncMock()
-    mock_redis.delete = AsyncMock()
-    return mock_redis
+    return _fake_redis_instance
 
 
 app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[get_redis] = override_get_redis
+
+
+@pytest.fixture(autouse=True)
+def reset_fake_redis():
+    """Reset FakeRedis store before each test to ensure isolation."""
+    _fake_redis_instance._store.clear()
 
 
 @pytest.fixture

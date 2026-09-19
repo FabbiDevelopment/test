@@ -47,13 +47,17 @@ def create_refresh_token(data: dict, expires_delta: timedelta | None = None) -> 
 
 
 def verify_token(token: str) -> dict[str, Any] | None:
-    """Verify and decode a JWT token."""
+    """Verify and decode a JWT token.
+
+    The 'exp' claim is validated automatically by python-jose (default behaviour).
+    An expired token raises ExpiredSignatureError, which is a subclass of JWTError
+    and is therefore caught below — returning None so callers treat it as invalid.
+    """
     try:
         payload = jwt.decode(
             token,
             settings.JWT_SECRET,
             algorithms=[settings.JWT_ALGORITHM],
-            options={"verify_exp": False},
         )
         return payload
     except JWTError:

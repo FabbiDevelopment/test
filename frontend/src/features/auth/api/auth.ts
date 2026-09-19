@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
 interface LoginRequest {
@@ -44,6 +44,8 @@ export function useRegister() {
 }
 
 export function useLogout() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async () => {
       await api.post("/auth/logout");
@@ -51,6 +53,7 @@ export function useLogout() {
     onSuccess: () => {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
+      queryClient.clear();
     },
   });
 }

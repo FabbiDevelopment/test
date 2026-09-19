@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useLogout, fetchCurrentUser } from "../api/auth";
 
+import { queryClient } from "@/lib/queryClient";
+
 export function useAuth() {
   const navigate = useNavigate();
   const logoutMutation = useLogout();
@@ -23,10 +25,12 @@ export function useAuth() {
   const logout = () => {
     logoutMutation.mutate(undefined, {
       onSuccess: () => {
+        queryClient.clear();
         navigate("/login");
       },
       onError: () => {
         // Even on error, clear local tokens and redirect
+        queryClient.clear();
         localStorage.removeItem("access_token");
         localStorage.removeItem("refresh_token");
         navigate("/login");

@@ -1,13 +1,29 @@
-FROM node:20-alpine AS build
+# Stage 1: Build stage
+FROM node:20-alpine AS builder
+
 WORKDIR /app
+
 COPY package*.json ./
-RUN npm install
+RUN npm ci
+
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine
-WORKDIR /app
-RUN npm install -g serve
-COPY --from=build /app/dist ./dist
+# Stage 2: Production Nginx stage
+FROM nginx:alpine AS runner
+
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Nginx configuration for Single Page Application routing
+RUN echo 'server { \
+    listen 3000; \
+    location / { \
+        root /usr/share/nginx/html; \
+        index index.html index.htm; \
+        try_files $uri $uri/ /index.html; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
+
 EXPOSE 3000
-CMD ["serve", "-s", "dist", "-l", "3000"]
+
+CMD ["nginx", "-g", "daemon off;"]

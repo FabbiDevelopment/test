@@ -49,10 +49,22 @@ async def seed_db():
             await session.commit()
             await session.refresh(demo_user)
             print("Demo user created.")
-        else:
-            print(f"Demo user {DEMO_EMAIL} already exists.")
-
         all_user_ids.append(demo_user.id)
+
+        # Seed demo tags
+        from app.models.tag import Tag
+        tag_result = await session.execute(select(Tag).where(Tag.user_id == demo_user.id))
+        demo_tags = tag_result.scalars().all()
+        if not demo_tags:
+            print(f"Creating demo tags for {DEMO_EMAIL}...")
+            sample_tags = [
+                Tag(id=uuid.uuid4(), user_id=demo_user.id, name="Work", color="#3b82f6"),
+                Tag(id=uuid.uuid4(), user_id=demo_user.id, name="Personal", color="#10b981"),
+                Tag(id=uuid.uuid4(), user_id=demo_user.id, name="Urgent", color="#ef4444"),
+            ]
+            session.add_all(sample_tags)
+            await session.commit()
+            print("Demo tags created.")
 
         # Check if we need to seed the other users
         # Check count of users

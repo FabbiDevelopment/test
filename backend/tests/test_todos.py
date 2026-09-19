@@ -1,122 +1,169 @@
-"""Todo tests."""
+"""Todo endpoints tests."""
 
 import pytest
 from httpx import AsyncClient
 
 
-async def get_auth_token(client: AsyncClient, email: str = "todo@example.com") -> str:
-    """Helper to register and get auth token."""
-    response = await client.post(
+async def create_authenticated_user(client: AsyncClient, email: str, password: str = "Password@123") -> tuple[str, str]:
+    """Helper to register user and return (token, user_id)."""
+    reg_response = await client.post(
         "/api/v1/auth/register",
-        json={"email": email, "password": "password123"},
+        json={"email": email, "password": password},
     )
-    return response.json()["access_token"]
+    assert reg_response.status_code == 201
+    token = reg_response.json()["access_token"]
+    
+    me_response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    user_id = me_response.json()["id"]
+    return token, user_id
 
 
 @pytest.mark.asyncio
-async def test_create_todo(client: AsyncClient):
-    """Test creating a new todo."""
-    token = await get_auth_token(client, "create@example.com")
+async def test_create_and_list_todos(client: AsyncClient):
+    """Test creating a todo and listing todos for the user."""
+    token, _ = await create_authenticated_user(client, "user1@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
 
-    response = await client.post(
+    create_res = await client.post(
         "/api/v1/todos",
-        json={"title": "Test Todo", "description": "A test todo item"},
-        headers={"Authorization": f"Bearer {token}"},
+        headers=headers,
+        json={"title": "Test Todo 1", "description": "Description 1"},
     )
-    assert response.status_code == 201
-    data = response.json()
-    assert data["title"] == "Test Todo"
-    assert data["description"] == "A test todo item"
-    assert data["completed"] is False
+    assert create_res.status_code == 201
+    todo_data = create_res.json()
+    assert todo_data["title"] == "Test Todo 1"
+    assert todo_data["description"] == "Description 1"
+    assert todo_data["completed"] is False
+
+    list_res = await client.get("/api/v1/todos", headers=headers)
+    assert list_res.status_code == 200
+    list_data = list_res.json()
+    assert list_data["total"] == 1
+    assert len(list_data["items"]) == 1
+    assert list_data["items"][0]["id"] == todo_data["id"]
 
 
 @pytest.mark.asyncio
-async def test_get_todos(client: AsyncClient):
-    """Test getting todo list."""
-    token = await get_auth_token(client, "list@example.com")
+async def test_authorization_boundary_cross_user_access(client: AsyncClient):
+    """Test that User A cannot read, update, or delete User B's todos."""
+    token_a, _ = await create_authenticated_user(client, "usera@example.com")
+    token_b, _ = await create_authenticated_user(client, "userb@example.com")
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+    headers_b = {"Authorization": f"Bearer {token_b}"}
 
-    # Create a todo first
-    await client.post(
+    # User A creates a todo
+    create_res = await client.post(
         "/api/v1/todos",
-        json={"title": "List Todo"},
-        headers={"Authorization": f"Bearer {token}"},
+        headers=headers_a,
+        json={"title": "Private Todo of A", "description": "Secret"},
     )
+    assert create_res.status_code == 201
+    todo_id = create_res.json()["id"]
 
-    # Get todos
-    response = await client.get(
-        "/api/v1/todos",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "items" in data
-    assert "total" in data
-    assert len(data["items"]) >= 1
+    # User B tries to read User A's todo -> 404
+    get_res = await client.get(f"/api/v1/todos/{todo_id}", headers=headers_b)
+    assert get_res.status_code == 404
 
-
-@pytest.mark.asyncio
-async def test_update_todo(client: AsyncClient):
-    """Test updating a todo."""
-    token = await get_auth_token(client, "update@example.com")
-
-    # Create a todo
-    create_response = await client.post(
-        "/api/v1/todos",
-        json={"title": "Update Me"},
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    todo_id = create_response.json()["id"]
-
-    # Update it
-    response = await client.put(
+    # User B tries to update User A's todo -> 404
+    update_res = await client.put(
         f"/api/v1/todos/{todo_id}",
-        json={"title": "Updated Title", "completed": True},
-        headers={"Authorization": f"Bearer {token}"},
+        headers=headers_b,
+        json={"title": "Hacked Title"},
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["title"] == "Updated Title"
+    assert update_res.status_code == 404
+
+    # User B tries to delete User A's todo -> 404
+    delete_res = await client.delete(f"/api/v1/todos/{todo_id}", headers=headers_b)
+    assert delete_res.status_code == 404
+
+    # User A's todo is intact
+    check_res = await client.get(f"/api/v1/todos/{todo_id}", headers=headers_a)
+    assert check_res.status_code == 200
+    assert check_res.json()["title"] == "Private Todo of A"
+
+
+@pytest.mark.asyncio
+async def test_boolean_toggle_persists_correctly(client: AsyncClient):
+    """Test that toggling completed from true back to false persists correctly."""
+    token, _ = await create_authenticated_user(client, "toggle_user@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Create todo (default completed=False)
+    create_res = await client.post(
+        "/api/v1/todos",
+        headers=headers,
+        json={"title": "Toggle Item", "description": "Testing toggle"},
+    )
+    todo_id = create_res.json()["id"]
+    assert create_res.json()["completed"] is False
+
+    # Update to completed=True
+    update_true = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        headers=headers,
+        json={"completed": True},
+    )
+    assert update_true.status_code == 200
+    assert update_true.json()["completed"] is True
+
+    # Update to completed=False (toggle back)
+    update_false = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        headers=headers,
+        json={"completed": False},
+    )
+    assert update_false.status_code == 200
+    assert update_false.json()["completed"] is False
+
+    # Verify persistence with GET
+    get_res = await client.get(f"/api/v1/todos/{todo_id}", headers=headers)
+    assert get_res.status_code == 200
+    assert get_res.json()["completed"] is False
+
+
+@pytest.mark.asyncio
+async def test_partial_update_preserves_description(client: AsyncClient):
+    """Test that updating title does not erase description."""
+    token, _ = await create_authenticated_user(client, "partial_user@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create_res = await client.post(
+        "/api/v1/todos",
+        headers=headers,
+        json={"title": "Initial Title", "description": "Important Details"},
+    )
+    todo_id = create_res.json()["id"]
+
+    # Partial update: only update title
+    update_res = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        headers=headers,
+        json={"title": "New Title"},
+    )
+    assert update_res.status_code == 200
+    updated_data = update_res.json()
+    assert updated_data["title"] == "New Title"
+    assert updated_data["description"] == "Important Details"
 
 
 @pytest.mark.asyncio
 async def test_delete_todo(client: AsyncClient):
-    """Test deleting a todo."""
-    token = await get_auth_token(client, "delete@example.com")
+    """Test deleting own todo."""
+    token, _ = await create_authenticated_user(client, "del_user@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
 
-    # Create a todo
-    create_response = await client.post(
+    create_res = await client.post(
         "/api/v1/todos",
+        headers=headers,
         json={"title": "Delete Me"},
-        headers={"Authorization": f"Bearer {token}"},
     )
-    todo_id = create_response.json()["id"]
+    todo_id = create_res.json()["id"]
 
-    # Delete it
-    response = await client.delete(
-        f"/api/v1/todos/{todo_id}",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert response.status_code == 204
+    del_res = await client.delete(f"/api/v1/todos/{todo_id}", headers=headers)
+    assert del_res.status_code == 204
 
-
-@pytest.mark.asyncio
-async def test_get_single_todo(client: AsyncClient):
-    """Test getting a single todo by ID."""
-    token = await get_auth_token(client, "single@example.com")
-
-    # Create a todo
-    create_response = await client.post(
-        "/api/v1/todos",
-        json={"title": "Single Todo", "description": "Get me"},
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    todo_id = create_response.json()["id"]
-
-    # Get it
-    response = await client.get(
-        f"/api/v1/todos/{todo_id}",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["title"] == "Single Todo"
+    get_res = await client.get(f"/api/v1/todos/{todo_id}", headers=headers)
+    assert get_res.status_code == 404

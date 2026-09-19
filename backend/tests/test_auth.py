@@ -75,3 +75,52 @@ async def test_logout(client: AsyncClient):
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Successfully logged out"
+
+
+@pytest.mark.asyncio
+async def test_expired_token_rejected(client: AsyncClient):
+    """Test that expired JWT access tokens are rejected with 401."""
+    from datetime import timedelta
+    from app.core.security import create_access_token
+
+    expired_token = create_access_token(
+        data={"sub": "00000000-0000-0000-0000-000000000001"},
+        expires_delta=timedelta(seconds=-10),
+    )
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_tampered_token_rejected(client: AsyncClient):
+    """Test that tampered/invalid JWT tokens are rejected with 401."""
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": "Bearer invalid.jwt.token"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_login_invalid_credentials_prevent_enumeration(client: AsyncClient):
+    """Test that invalid logins return 401 without leaking user existence."""
+    # Non-existent user
+    res1 = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "nonexistent@example.com", "password": "password123"},
+    )
+    assert res1.status_code == 401
+
+    # Existent user with wrong password
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "exists@example.com", "password": "password123"},
+    )
+    res2 = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "exists@example.com", "password": "wrongpassword"},
+    )
+    assert res2.status_code == 401

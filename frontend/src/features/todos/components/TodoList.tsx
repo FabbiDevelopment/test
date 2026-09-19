@@ -1,15 +1,19 @@
 import { useState } from "react";
 import { TodoItem } from "./TodoItem";
 import { TodoForm } from "./TodoForm";
+import { TodoTagDialog } from "./TodoTagDialog";
 import type { Todo } from "../api/todos";
 import { useDeleteTodo, useToggleTodo } from "../api/todos";
 
 interface TodoListProps {
   todos: Todo[];
+  selectedIds?: Set<string>;
+  onSelectToggle?: (id: string) => void;
 }
 
-export function TodoList({ todos }: TodoListProps) {
+export function TodoList({ todos, selectedIds, onSelectToggle }: TodoListProps) {
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
+  const [taggingTodo, setTaggingTodo] = useState<Todo | null>(null);
   const deleteTodo = useDeleteTodo();
   const toggleTodo = useToggleTodo();
 
@@ -28,8 +32,8 @@ export function TodoList({ todos }: TodoListProps) {
   if (todos.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground">
-        <p className="text-lg">No todos yet</p>
-        <p className="text-sm mt-1">Create your first todo to get started</p>
+        <p className="text-lg">No todos match your criteria</p>
+        <p className="text-sm mt-1">Try clearing filters or add a new todo</p>
       </div>
     );
   }
@@ -39,12 +43,15 @@ export function TodoList({ todos }: TodoListProps) {
       <div className="space-y-2">
         {todos.map((todo, index) => (
           <TodoItem
-            key={index}
+            key={todo.id}
             todo={todo}
             index={index}
+            isSelected={selectedIds?.has(todo.id)}
+            onSelectToggle={onSelectToggle}
             onToggle={handleToggle}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            onManageTags={(t) => setTaggingTodo(t)}
           />
         ))}
       </div>
@@ -55,6 +62,14 @@ export function TodoList({ todos }: TodoListProps) {
           todo={editingTodo}
           open={!!editingTodo}
           onClose={() => setEditingTodo(null)}
+        />
+      )}
+
+      {taggingTodo && (
+        <TodoTagDialog
+          todo={taggingTodo}
+          open={!!taggingTodo}
+          onClose={() => setTaggingTodo(null)}
         />
       )}
     </>

@@ -8,6 +8,7 @@ venv/
 # Environment
 # .env
 *.env.local
+backend/.env
 
 # IDE
 .vscode/
@@ -17,8 +18,11 @@ venv/
 dist/
 build/
 
-# Test
+# Test & Local DB
 test.db
+dev.db
+*.db
+*.db-journal
 .pytest_cache/
 .coverage
 
@@ -31,5 +35,3 @@ docs/ANSWER_KEY.md
 # OS
 .DS_Store
 Thumbs.db
-
-docs/

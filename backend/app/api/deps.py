@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.redis import redis_client
+from app.core.redis import RedisClient, redis_client
 from app.core.security import verify_token
 from app.db.session import get_db
 from app.models.user import User
@@ -31,6 +31,14 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
+        )
+
+    # Bug #8 fix: check JTI blacklist so logged-out tokens are rejected
+    jti = payload.get("jti")
+    if jti and await redis_client.is_blacklisted(jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
         )
 
     try:

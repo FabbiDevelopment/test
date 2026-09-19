@@ -34,7 +34,10 @@ interface UpdateTodoRequest {
 
 export function useTodos(page: number = 1, size: number = 10000) {
   return useQuery({
-    queryKey: ["todos"],
+    // Bug #10 fix: include page & size in queryKey so React Query correctly
+    // refetches when pagination params change (previously ["todos"] was shared
+    // across all pages causing stale cache to be shown on page changes).
+    queryKey: ["todos", page, size],
     queryFn: async (): Promise<TodoListResponse> => {
       const response = await api.get("/todos", {
         params: { page, size },
@@ -74,13 +77,13 @@ export function useUpdateTodo() {
       return response.data;
     },
     onMutate: async ({ id, data }) => {
-      // Cancel outgoing queries
+      // Cancel outgoing queries — prefix match covers ["todos", page, size]
       await queryClient.cancelQueries({ queryKey: ["todos"] });
 
-      // Snapshot previous value
+      // Snapshot previous value (optimistic update uses first cached page)
       const previousTodos = queryClient.getQueryData<TodoListResponse>(["todos"]);
 
-      // Optimistically update
+      // Optimistically update the cached list
       if (previousTodos) {
         queryClient.setQueryData<TodoListResponse>(["todos"], {
           ...previousTodos,
@@ -96,6 +99,7 @@ export function useUpdateTodo() {
       toast.error("Failed to update todo");
     },
     onSettled: () => {
+      // Invalidate all todos queries (prefix match)
       queryClient.invalidateQueries({ queryKey: ["todos"] });
     },
   });

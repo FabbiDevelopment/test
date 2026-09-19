@@ -34,7 +34,9 @@ async def list_todos(
     """Get paginated list of todos."""
     skip = (page - 1) * size
 
-    cache_key = "todos:list"
+    # Bug #2 fix: scope cache key per user + page + size to prevent data leaks
+    # between users (previously was a global "todos:list" shared by everyone).
+    cache_key = f"todos:list:{current_user.id}:{page}:{size}"
 
     # Try to get from cache
     cached = await redis.get(cache_key)
@@ -79,9 +81,15 @@ async def create_new_todo(
     todo_data: TodoCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis: RedisClient = Depends(get_redis),
 ):
     """Create a new todo item."""
     todo = await create_todo(db, todo_data, current_user.id)
+
+    # Bug #5 fix: invalidate this user's todo list cache after creating a new item.
+    # Previously redis was not injected here at all so cache was never cleared.
+    await redis.delete_pattern(f"todos:list:{current_user.id}:*")
+
     return todo
 
 
@@ -97,6 +105,13 @@ async def get_todo(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo not found",
+        )
+
+    # Bug #3 fix: enforce ownership — only the owner can read their own todo.
+    if todo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this todo",
         )
 
     return todo
@@ -118,9 +133,19 @@ async def update_existing_todo(
             detail="Todo not found",
         )
 
-    update_data = todo_data.model_dump()
+    # Bug #3 fix: enforce ownership — only the owner can update their own todo.
+    if todo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this todo",
+        )
 
-    if todo_data.completed:
+    update_data = todo_data.model_dump(exclude_unset=True)
+
+    # Bug #4 fix: use `is not None` instead of truthy check so that
+    # completed=False is correctly applied (previously `if todo_data.completed:`
+    # would skip False values, making it impossible to un-complete a todo).
+    if "completed" in update_data and todo_data.completed is not None:
         todo.completed = todo_data.completed
 
     # Apply other updates
@@ -130,6 +155,9 @@ async def update_existing_todo(
         todo.description = update_data["description"]
 
     updated_todo = await update_todo(db, todo, {})
+
+    # Bug #5 fix: invalidate this user's todo list cache after update.
+    await redis.delete_pattern(f"todos:list:{current_user.id}:*")
 
     return updated_todo
 
@@ -149,6 +177,17 @@ async def delete_existing_todo(
             detail="Todo not found",
         )
 
+    # Bug #3 fix: enforce ownership — only the owner can delete their own todo.
+    if todo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this todo",
+        )
+
     await delete_todo(db, todo)
+
+    # Bug #5 fix: invalidate this user's todo list cache after deletion.
+    # Previously redis was injected but never used — cache was never cleared.
+    await redis.delete_pattern(f"todos:list:{current_user.id}:*")
 
     return None

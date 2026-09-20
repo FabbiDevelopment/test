@@ -15,6 +15,9 @@ class TodoUpdate(BaseModel):
     completed: bool | None = None
 
 
+from app.schemas.tag import TagResponse
+
+
 class TodoResponse(BaseModel):
     id: uuid.UUID
     title: str
@@ -24,6 +27,7 @@ class TodoResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     user_email: str | None = None
+    tags: list[TagResponse] = []
 
     model_config = {"from_attributes": True}
 

@@ -3,6 +3,8 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
 
+import { Tag } from "@/features/tags/api/tags";
+
 export interface Todo {
   id: string;
   title: string;
@@ -11,6 +13,7 @@ export interface Todo {
   user_id: string;
   created_at: string;
   updated_at: string;
+  tags?: Tag[];
 }
 
 interface TodoListResponse {
@@ -31,13 +34,32 @@ interface UpdateTodoRequest {
   completed?: boolean;
 }
 
+export interface TodoFilterParams {
+  keyword?: string;
+  status?: string;
+  tagId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
 
-export function useTodos(page: number = 1, size: number = 20) {
+export function useTodos(
+  page: number = 1,
+  size: number = 20,
+  filterParams?: TodoFilterParams
+) {
+  const queryParams: Record<string, any> = { page, size };
+
+  if (filterParams?.keyword) queryParams.keyword = filterParams.keyword;
+  if (filterParams?.status && filterParams.status !== "all") queryParams.status = filterParams.status;
+  if (filterParams?.tagId && filterParams.tagId !== "all") queryParams.tag_id = filterParams.tagId;
+  if (filterParams?.dateFrom) queryParams.date_from = filterParams.dateFrom;
+  if (filterParams?.dateTo) queryParams.date_to = filterParams.dateTo;
+
   return useQuery({
-    queryKey: ["todos"],
+    queryKey: ["todos", page, size, filterParams],
     queryFn: async (): Promise<TodoListResponse> => {
       const response = await api.get("/todos", {
-        params: { page, size },
+        params: queryParams,
       });
       return response.data;
     },

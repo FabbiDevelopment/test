@@ -1,6 +1,7 @@
 import asyncio
 import os
 from collections.abc import AsyncGenerator
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -56,6 +57,9 @@ def override_get_redis():
     mock_redis.get = AsyncMock(return_value=None)
     mock_redis.set = AsyncMock()
     mock_redis.delete = AsyncMock()
+    mock_redis.delete_pattern = AsyncMock(return_value=0)
+    mock_redis.set_blacklist = AsyncMock()
+    mock_redis.is_blacklisted = AsyncMock(return_value=False)
     return mock_redis
 
 
@@ -83,3 +87,23 @@ def auth_headers() -> dict:
     """Create auth headers with a valid token for testing."""
     token = create_access_token(data={"sub": "00000000-0000-0000-0000-000000000001"})
     return {"Authorization": f"Bearer {token}"}
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def create_expired_token(user_id: str) -> str:
+    """Create a JWT that is already expired (used for expiry-rejection tests)."""
+    return create_access_token(
+        data={"sub": user_id},
+        expires_delta=timedelta(minutes=-1),
+    )
+
+
+async def register_user(client: AsyncClient, email: str, password: str = "password123") -> dict:
+    """Register a user and return the full token response payload."""
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": password},
+    )
+    assert response.status_code == 201, f"Registration failed: {response.text}"
+    return response.json()

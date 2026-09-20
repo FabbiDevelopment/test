@@ -1,7 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import datetime
+from datetime import timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_redis
+from app.core.config import settings
 from app.core.redis import RedisClient
 from app.core.security import create_access_token, create_refresh_token, verify_token
 from app.db.session import get_db
@@ -51,10 +56,12 @@ async def login(
     """Authenticate user and return tokens."""
     user = await get_user_by_email(db, user_data.email)
 
+    # Bug #6 fix: return 401 with a generic message instead of 404 to prevent
+    # user enumeration (attacker could discover which emails are registered).
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User with this email not found",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
         )
 
     from app.core.security import verify_password
@@ -62,7 +69,7 @@ async def login(
     if not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password",
+            detail="Invalid email or password",
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
@@ -89,9 +96,34 @@ async def refresh_token(
             detail="Invalid refresh token",
         )
 
+    # Bug #7 fix: check if this refresh token's JTI has already been blacklisted
+    # (prevents reuse of a refresh token after rotation)
+    old_jti = payload.get("jti")
+    if old_jti and await redis.is_blacklisted(old_jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has been revoked",
+        )
+
     user_id = payload.get("sub")
     access_token = create_access_token(data={"sub": user_id})
     refresh_token = create_refresh_token(data={"sub": user_id})
+
+    # Bug #7 fix: blacklist the old refresh token JTI so it cannot be reused
+    if old_jti:
+        try:
+            old_payload = jwt.decode(
+                request.refresh_token,
+                settings.JWT_SECRET,
+                algorithms=[settings.JWT_ALGORITHM],
+            )
+            exp = old_payload.get("exp")
+            if exp:
+                remaining = int(exp - datetime.datetime.now(timezone.utc).timestamp())
+                if remaining > 0:
+                    await redis.set_blacklist(old_jti, remaining)
+        except JWTError:
+            pass
 
     return TokenResponse(
         access_token=access_token,
@@ -101,9 +133,29 @@ async def refresh_token(
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     current_user: User = Depends(get_current_user),
+    redis: RedisClient = Depends(get_redis),
 ):
-    """Logout user."""
+    """Logout user.
+
+    Bug #8 fix: blacklist the access token's JTI in Redis so it cannot be
+    reused for the remainder of its natural lifetime. Previously logout only
+    returned a success message without invalidating anything.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1]
+        payload = verify_token(token)
+        if payload:
+            jti = payload.get("jti")
+            if jti:
+                exp = payload.get("exp")
+                if exp:
+                    remaining = int(exp - datetime.datetime.now(timezone.utc).timestamp())
+                    if remaining > 0:
+                        await redis.set_blacklist(jti, remaining)
+
     return {"message": "Successfully logged out"}
 
 

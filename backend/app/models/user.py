@@ -21,6 +21,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
+        unique=True,  # Bug #9 fix: enforce uniqueness at DB level to prevent race-condition duplicates
     )
     hashed_password: Mapped[str] = mapped_column(
         String(255),

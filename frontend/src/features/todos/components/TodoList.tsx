@@ -6,9 +6,11 @@ import { useDeleteTodo, useToggleTodo } from "../api/todos";
 
 interface TodoListProps {
   todos: Todo[];
+  selectedIds?: string[];
+  onSelectToggle?: (id: string) => void;
 }
 
-export function TodoList({ todos }: TodoListProps) {
+export function TodoList({ todos, selectedIds = [], onSelectToggle }: TodoListProps) {
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const deleteTodo = useDeleteTodo();
   const toggleTodo = useToggleTodo();
@@ -27,9 +29,9 @@ export function TodoList({ todos }: TodoListProps) {
 
   if (todos.length === 0) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        <p className="text-lg">No todos yet</p>
-        <p className="text-sm mt-1">Create your first todo to get started</p>
+      <div className="text-center py-12 text-muted-foreground border rounded-lg bg-card">
+        <p className="text-lg font-medium">No todos found</p>
+        <p className="text-sm mt-1">Try adjusting your search filters or create a new todo</p>
       </div>
     );
   }
@@ -39,9 +41,11 @@ export function TodoList({ todos }: TodoListProps) {
       <div className="space-y-2">
         {todos.map((todo, index) => (
           <TodoItem
-            key={index}
+            key={todo.id || index}
             todo={todo}
             index={index}
+            isSelected={selectedIds.includes(todo.id)}
+            onSelectToggle={onSelectToggle}
             onToggle={handleToggle}
             onEdit={handleEdit}
             onDelete={handleDelete}

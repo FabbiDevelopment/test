@@ -21,6 +21,10 @@ build/
 test.db
 .pytest_cache/
 .coverage
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
 
 # Docker
 postgres_data/
@@ -31,5 +35,3 @@ docs/ANSWER_KEY.md
 # OS
 .DS_Store
 Thumbs.db
-
-docs/

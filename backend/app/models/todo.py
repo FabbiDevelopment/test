@@ -2,19 +2,24 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.user import User
+    from app.models.tag import Tag
 
 
 class Todo(Base):
     """Todo model."""
 
     __tablename__ = "todos"
+    __table_args__ = (
+        Index("ix_todos_user_completed_created", "user_id", "completed", "created_at"),
+        Index("ix_todos_user_created", "user_id", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True,
@@ -51,6 +56,12 @@ class Todo(Base):
         "User",
         back_populates="todos",
         lazy="select",
+    )
+    tags: Mapped[list["Tag"]] = relationship(  # noqa: F821
+        "Tag",
+        secondary="todo_tags",
+        back_populates="todos",
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:

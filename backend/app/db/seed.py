@@ -107,14 +107,20 @@ async def seed_db():
             print("SEED_TODOS is 0. Skipping TODO seeding.")
             return
 
-        # Check if todos already exist
-        result = await session.execute(select(Todo).limit(1))
-        has_todos = result.scalar_one_or_none() is not None
+        # Check if todos count meets TARGET_TODOS
+        from sqlalchemy import func
 
-        if has_todos:
-            print("Database already contains TODOs. Skipping TODO seeding.")
+        count_todos_result = await session.execute(select(func.count()).select_from(Todo))
+        current_todo_count = count_todos_result.scalar_one()
+
+        if current_todo_count >= TARGET_TODOS:
+            print(
+                f"Database already contains {current_todo_count} TODOs "
+                f"(target: {TARGET_TODOS}). Skipping TODO seeding."
+            )
             return
 
+        todos_to_create = TARGET_TODOS - current_todo_count
         print("Pre-generating fake data pools for high performance...")
         fake = Faker()
         titles = [
@@ -123,17 +129,18 @@ async def seed_db():
         ]
         descriptions = [fake.text(max_nb_chars=150) for _ in range(2000)]
 
-        total_batches = (TARGET_TODOS + TODO_BATCH_SIZE - 1) // TODO_BATCH_SIZE
+        total_batches = (todos_to_create + TODO_BATCH_SIZE - 1) // TODO_BATCH_SIZE
 
         print(
-            f"Seeding {TARGET_TODOS} TODOs distributed "
+            f"Current TODO count: {current_todo_count}. "
+            f"Seeding {todos_to_create} more TODOs distributed "
             f"across {len(all_user_ids)} users..."
         )
 
-        for batch_offset in range(0, TARGET_TODOS, TODO_BATCH_SIZE):
+        for batch_offset in range(0, todos_to_create, TODO_BATCH_SIZE):
             batch_started_at = time.time()
             batch_idx = batch_offset // TODO_BATCH_SIZE
-            batch_count = min(TODO_BATCH_SIZE, TARGET_TODOS - batch_offset)
+            batch_count = min(TODO_BATCH_SIZE, todos_to_create - batch_offset)
             todos_batch = []
             for _ in range(batch_count):
                 now = datetime.now(timezone.utc)
@@ -154,7 +161,7 @@ async def seed_db():
             await session.commit()
 
             batch_elapsed = time.time() - batch_started_at
-            inserted_count = min((batch_idx + 1) * TODO_BATCH_SIZE, TARGET_TODOS)
+            inserted_count = min((batch_idx + 1) * TODO_BATCH_SIZE, todos_to_create)
             print(
                 f"Batch {batch_idx + 1}/{total_batches} "
                 f"inserted ({inserted_count} total). "

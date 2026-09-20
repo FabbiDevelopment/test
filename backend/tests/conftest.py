@@ -56,6 +56,9 @@ def override_get_redis():
     mock_redis.get = AsyncMock(return_value=None)
     mock_redis.set = AsyncMock()
     mock_redis.delete = AsyncMock()
+    mock_redis.client = MagicMock()
+    mock_redis.client.keys = AsyncMock(return_value=[])
+    mock_redis.client.delete = AsyncMock()
     return mock_redis
 
 

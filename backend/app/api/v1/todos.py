@@ -2,7 +2,6 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_redis
@@ -21,6 +20,24 @@ from app.services.todo_service import (
 router = APIRouter()
 
 CACHE_TTL = 300  # 5 minutes
+CACHE_KEY_PREFIX = "todos:list"
+
+
+def todo_cache_key(user_id: uuid.UUID, version: str, page: int, size: int) -> str:
+    return f"{CACHE_KEY_PREFIX}:{user_id}:{version}:{page}:{size}"
+
+
+async def invalidate_todo_cache(redis: RedisClient, user_id: uuid.UUID) -> None:
+    # Rotate after commit; an in-flight read can only refill its old namespace.
+    await redis.set(f"{CACHE_KEY_PREFIX}:{user_id}:version", str(uuid.uuid4()))
+
+
+def ensure_todo_owner(todo, current_user: User):
+    if todo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Todo not found",
+        )
 
 
 @router.get("", response_model=TodoListResponse)
@@ -34,7 +51,8 @@ async def list_todos(
     """Get paginated list of todos."""
     skip = (page - 1) * size
 
-    cache_key = "todos:list"
+    version = await redis.get(f"{CACHE_KEY_PREFIX}:{current_user.id}:version") or "0"
+    cache_key = todo_cache_key(current_user.id, version, page, size)
 
     # Try to get from cache
     cached = await redis.get(cache_key)
@@ -44,22 +62,19 @@ async def list_todos(
 
     todos, total = await get_todos(db, user_id=current_user.id, skip=skip, limit=size)
 
-    items = []
-    for todo in todos:
-        user_result = await db.execute(select(User).where(User.id == todo.user_id))
-        user = user_result.scalar_one_or_none()
-        items.append(
-            TodoResponse(
-                id=todo.id,
-                title=todo.title,
-                description=todo.description,
-                completed=todo.completed,
-                user_id=todo.user_id,
-                created_at=todo.created_at,
-                updated_at=todo.updated_at,
-                user_email=user.email if user else None,
-            )
+    items = [
+        TodoResponse(
+            id=todo.id,
+            title=todo.title,
+            description=todo.description,
+            completed=todo.completed,
+            user_id=todo.user_id,
+            created_at=todo.created_at,
+            updated_at=todo.updated_at,
+            user_email=current_user.email,
         )
+        for todo in todos
+    ]
 
     response = TodoListResponse(
         items=items,
@@ -79,9 +94,12 @@ async def create_new_todo(
     todo_data: TodoCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis: RedisClient = Depends(get_redis),
 ):
     """Create a new todo item."""
     todo = await create_todo(db, todo_data, current_user.id)
+    await db.commit()
+    await invalidate_todo_cache(redis, current_user.id)
     return todo
 
 
@@ -98,6 +116,7 @@ async def get_todo(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo not found",
         )
+    ensure_todo_owner(todo, current_user)
 
     return todo
 
@@ -117,19 +136,15 @@ async def update_existing_todo(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo not found",
         )
+    ensure_todo_owner(todo, current_user)
 
-    update_data = todo_data.model_dump()
-
-    if todo_data.completed:
-        todo.completed = todo_data.completed
-
-    # Apply other updates
-    if update_data.get("title") is not None:
-        todo.title = update_data["title"]
-    if "description" in update_data:
-        todo.description = update_data["description"]
+    update_data = todo_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(todo, field, value)
 
     updated_todo = await update_todo(db, todo, {})
+    await db.commit()
+    await invalidate_todo_cache(redis, current_user.id)
 
     return updated_todo
 
@@ -148,7 +163,10 @@ async def delete_existing_todo(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo not found",
         )
+    ensure_todo_owner(todo, current_user)
 
     await delete_todo(db, todo)
+    await db.commit()
+    await invalidate_todo_cache(redis, current_user.id)
 
     return None

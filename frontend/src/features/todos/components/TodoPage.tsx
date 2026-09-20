@@ -6,11 +6,22 @@ import { Separator } from "@/components/ui/separator";
 import { useTodos } from "../api/todos";
 import { TodoList } from "./TodoList";
 import { TodoForm } from "./TodoForm";
+import { TodoFilterBar, TodoFilters } from "./TodoFilterBar";
+import { TagManager } from "@/features/tags/components/TagManager";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
 export function TodoPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const { data, isLoading, error } = useTodos();
+  const [showTagManager, setShowTagManager] = useState(false);
+  const [filters, setFilters] = useState<TodoFilters>({
+    keyword: "",
+    status: "all",
+    tagId: "all",
+    dateFrom: "",
+    dateTo: "",
+  });
+
+  const { data, isLoading, error } = useTodos(1, 20, filters);
   const { user, logout } = useAuth();
 
   return (
@@ -43,6 +54,13 @@ export function TodoPage() {
           </CardHeader>
           <Separator />
           <CardContent className="pt-4">
+            {/* Filter Bar */}
+            <TodoFilterBar
+              filters={filters}
+              onChange={setFilters}
+              onOpenTagManager={() => setShowTagManager(true)}
+            />
+
             {isLoading && (
               <div className="text-center py-12 text-muted-foreground">
                 Loading todos...
@@ -66,11 +84,16 @@ export function TodoPage() {
         </Card>
       </main>
 
-      {/* Create Todo Dialog */}
+      {/* Dialogs */}
       <TodoForm
         mode="create"
         open={showCreateForm}
         onClose={() => setShowCreateForm(false)}
+      />
+
+      <TagManager
+        open={showTagManager}
+        onClose={() => setShowTagManager(false)}
       />
     </div>
   );

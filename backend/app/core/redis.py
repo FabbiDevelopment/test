@@ -28,8 +28,9 @@ class RedisClient:
     async def set(self, key: str, value: str, ex: int | None = None):
         await self._redis.set(key, value, ex=ex)
 
-    async def delete(self, key: str):
-        await self._redis.delete(key)
+    async def delete(self, *keys: str):
+        if self._redis and keys:
+            await self._redis.delete(*keys)
 
     async def exists(self, key: str) -> bool:
         return await self._redis.exists(key)

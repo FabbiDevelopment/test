@@ -284,3 +284,43 @@ async def test_todo_access_requires_ownership(
     elif method == "DELETE":
         deleted = await client.get(url, headers=owner_headers)
         assert deleted.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload, expected_title, expected_description, expected_completed",
+    [
+        ({"title": "Renamed"}, "Renamed", "Keep this description", False),
+        ({"completed": True}, "Original", "Keep this description", True),
+        ({}, "Original", "Keep this description", False),
+        ({"description": "New details"}, "Original", "New details", False),
+        ({"description": None}, "Original", None, False),
+        ({"description": ""}, "Original", "", False),
+    ],
+)
+async def test_partial_update_preserves_description(
+    client: AsyncClient,
+    payload: dict,
+    expected_title: str,
+    expected_description: str | None,
+    expected_completed: bool,
+):
+    """Omitting description preserves it; an explicit value updates or clears it."""
+    token = await get_auth_token(client, "partial-update@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    created = await client.post(
+        "/api/v1/todos",
+        json={"title": "Original", "description": "Keep this description"},
+        headers=headers,
+    )
+    assert created.status_code == 201
+    url = f"/api/v1/todos/{created.json()['id']}"
+
+    updated = await client.put(url, json=payload, headers=headers)
+    assert updated.status_code == 200
+    persisted = await client.get(url, headers=headers)
+    assert persisted.status_code == 200
+    for data in (updated.json(), persisted.json()):
+        assert data["title"] == expected_title
+        assert data["description"] == expected_description
+        assert data["completed"] is expected_completed

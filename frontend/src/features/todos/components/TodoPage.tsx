@@ -3,14 +3,18 @@ import { Plus, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useTodos } from "../api/todos";
+import { useTags, useTodos, type TodoFilters } from "../api/todos";
 import { TodoList } from "./TodoList";
 import { TodoForm } from "./TodoForm";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { TodoFilters as TodoFiltersPanel } from "./TodoFilters";
+import { TagManager } from "./TagManager";
 
 export function TodoPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const { data, isLoading, error } = useTodos();
+  const [filters, setFilters] = useState<TodoFilters>({ status: "all" });
+  const { data: tags = [] } = useTags();
+  const { data, isLoading, error } = useTodos(filters);
   const { user, logout, isLoading: isUserLoading, error: userError } = useAuth();
 
   return (
@@ -42,7 +46,22 @@ export function TodoPage() {
             </Button>
           </CardHeader>
           <Separator />
-          <CardContent className="pt-4">
+          <CardContent className="space-y-4 pt-4">
+            <TodoFiltersPanel
+              tags={tags}
+              filters={filters}
+              onApply={setFilters}
+            />
+            <TagManager
+              onTagDeleted={(tagId) =>
+                setFilters((current) =>
+                  current.tagId === tagId
+                    ? { ...current, tagId: undefined }
+                    : current
+                )
+              }
+            />
+
             {(isLoading || isUserLoading) && (
               <div className="text-center py-12 text-muted-foreground">
                 Loading todos...
@@ -55,7 +74,20 @@ export function TodoPage() {
               </div>
             )}
 
-            {data && <TodoList todos={data.items} />}
+            {data && (
+              <TodoList
+                key={JSON.stringify(filters)}
+                todos={data.items}
+                tags={tags}
+                hasActiveFilters={Boolean(
+                  filters.keyword ||
+                    filters.tagId ||
+                    filters.dateFrom ||
+                    filters.dateTo ||
+                    (filters.status && filters.status !== "all")
+                )}
+              />
+            )}
 
             {data && data.total > 0 && (
               <div className="mt-4 text-center text-sm text-muted-foreground">

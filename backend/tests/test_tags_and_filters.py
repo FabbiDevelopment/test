@@ -1,10 +1,11 @@
-from datetime import date
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
 from unittest.mock import AsyncMock, MagicMock
 
 from app.api.deps import get_redis
+from app.core.config import settings
 from app.main import app
 
 
@@ -129,9 +130,20 @@ async def test_todo_filters_status_tag_keyword_date_and_cache_keys(
     )
     assert [item["id"] for item in by_keyword.json()["items"]] == [alpha["id"]]
 
+    created_at = datetime.fromisoformat(alpha["created_at"])
+    if created_at.tzinfo is None:
+        # SQLite drops timezone metadata; model timestamps are still stored in UTC.
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    local_created_date = created_at.astimezone(
+        timezone(timedelta(hours=settings.APP_UTC_OFFSET_HOURS))
+    ).date().isoformat()
     by_date = await client.get(
         "/api/v1/todos",
-        params={"date_from": date.today().isoformat(), "page_size": 1},
+        params={
+            "date_from": local_created_date,
+            "date_to": local_created_date,
+            "page_size": 1,
+        },
         headers=owner,
     )
     assert by_date.status_code == 200
@@ -142,6 +154,14 @@ async def test_todo_filters_status_tag_keyword_date_and_cache_keys(
         "/api/v1/todos", params={"tag_id": foreign_tag["id"]}, headers=owner
     )
     assert hidden_tag.status_code == 404
+
+    invalid_date_format = await client.get(
+        "/api/v1/todos",
+        params={"date_from": "03-10-2026"},
+        headers=owner,
+    )
+    assert invalid_date_format.status_code == 422
+
     invalid_range = await client.get(
         "/api/v1/todos",
         params={"date_from": "2026-10-03", "date_to": "2026-10-02"},

@@ -1,8 +1,9 @@
 import hashlib
 import json
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_redis
@@ -70,7 +71,7 @@ def serialize_todo(todo: Todo) -> TodoResponse:
 
 @router.get("", response_model=TodoListResponse)
 async def list_todos(
-    params: TodoListParams = Depends(),
+    params: Annotated[TodoListParams, Query()],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     redis: RedisClient = Depends(get_redis),

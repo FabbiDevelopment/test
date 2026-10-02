@@ -117,9 +117,11 @@ for (const logoutFails of [false, true]) {
     await page.getByLabel("Description (optional)", { exact: true }).fill("New details");
     await page.getByRole("button", { name: "Create", exact: true }).click();
     await expect(page.getByText("Created by B", { exact: true })).toBeVisible();
-    await page.getByRole("checkbox").first().click();
+    await page.getByRole("checkbox", { name: "Private B", exact: true }).click();
     await expect.poll(() => state.listReads.b).toBeGreaterThanOrEqual(3);
-    await expect(page.getByRole("checkbox").first()).toHaveAttribute("aria-checked", "true");
+    await expect(
+      page.getByRole("checkbox", { name: "Private B", exact: true })
+    ).toHaveAttribute("aria-checked", "true");
   });
 }
 
@@ -160,7 +162,7 @@ for (const updateUnauthorized of [false, true]) {
     await page.goto("/login");
     await login(page, "a");
     await expect(page.getByText("Private A", { exact: true })).toBeVisible();
-    await page.getByRole("checkbox").click();
+    await page.getByRole("checkbox", { name: "Private A", exact: true }).click();
     await expect.poll(() => state.state.updateStarted).toBe(true);
     await logout(page);
     await login(page, "b");

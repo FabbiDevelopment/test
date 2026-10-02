@@ -1,13 +1,33 @@
 import uuid
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
+from app.core.config import settings
 from app.models.tag import Tag
 from app.models.todo import Todo
 from app.schemas.todo import TodoCreate, TodoListParams
+
+
+def normalize_date_filter(
+    value: date | datetime, end_of_day: bool = False
+) -> datetime:
+    """Convert date-only app-local boundaries to UTC for timestamp comparisons."""
+    if isinstance(value, datetime):
+        normalized_value = value
+        if normalized_value.tzinfo is None:
+            normalized_value = normalized_value.replace(tzinfo=timezone.utc)
+    else:
+        app_timezone = timezone(timedelta(hours=settings.APP_UTC_OFFSET_HOURS))
+        normalized_value = datetime.combine(value, time.min, tzinfo=app_timezone)
+
+    if end_of_day:
+        normalized_value = normalized_value.replace(
+            hour=23, minute=59, second=59, microsecond=999999
+        )
+    return normalized_value.astimezone(timezone.utc)
 
 
 async def create_todo(
@@ -47,12 +67,12 @@ def build_todo_filters(user_id: uuid.UUID, params: TodoListParams):
         )
 
     if params.date_from is not None:
-        start = datetime.combine(params.date_from, time.min, tzinfo=timezone.utc)
-        filters.append(Todo.created_at >= start)
+        filters.append(Todo.created_at >= normalize_date_filter(params.date_from))
     if params.date_to is not None:
-        end_date = params.date_to + timedelta(days=1)
-        end = datetime.combine(end_date, time.min, tzinfo=timezone.utc)
-        filters.append(Todo.created_at < end)
+        filters.append(
+            Todo.created_at
+            <= normalize_date_filter(params.date_to, end_of_day=True)
+        )
 
     return filters
 

@@ -7,6 +7,8 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://fabbi:fabbi_secret@localhost:5432/postgres"
     )
     DB_ECHO: bool = True
+    # Date-only filters use the app's local calendar day (Vietnam, UTC+7).
+    APP_UTC_OFFSET_HOURS: int = 7
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"

@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
+import { useCurrentUser } from "@/features/auth/api/auth";
 
 export interface Todo {
   id: string;
@@ -33,11 +34,14 @@ interface UpdateTodoRequest {
 
 
 export function useTodos(page: number = 1, size: number = 10000) {
+  const { data: user } = useCurrentUser();
   return useQuery({
-    queryKey: ["todos"],
-    queryFn: async (): Promise<TodoListResponse> => {
+    queryKey: ["todos", user?.id, page, size],
+    enabled: !!user,
+    queryFn: async ({ signal }): Promise<TodoListResponse> => {
       const response = await api.get("/todos", {
         params: { page, size },
+        signal,
       });
       return response.data;
     },
@@ -45,13 +49,14 @@ export function useTodos(page: number = 1, size: number = 10000) {
 }
 
 export function useCreateTodo() {
+  const { data: user } = useCurrentUser();
   return useMutation({
     mutationFn: async (data: CreateTodoRequest): Promise<Todo> => {
       const response = await api.post("/todos", data);
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      queryClient.invalidateQueries({ queryKey: ["todos", user?.id] });
       toast.success("Todo created successfully!");
     },
     onError: () => {
@@ -62,6 +67,8 @@ export function useCreateTodo() {
 
 
 export function useUpdateTodo() {
+  const { data: user } = useCurrentUser();
+  const queryKey = ["todos", user?.id];
   return useMutation({
     mutationFn: async ({
       id,
@@ -75,20 +82,21 @@ export function useUpdateTodo() {
     },
     onMutate: async ({ id, data }) => {
       // Cancel outgoing queries
-      await queryClient.cancelQueries({ queryKey: ["todos"] });
+      await queryClient.cancelQueries({ queryKey });
 
       // Snapshot previous value
-      const previousTodos = queryClient.getQueryData<TodoListResponse>(["todos"]);
+      const previousTodos = queryClient.getQueriesData<TodoListResponse>({ queryKey });
 
       // Optimistically update
-      if (previousTodos) {
-        queryClient.setQueryData<TodoListResponse>(["todos"], {
-          ...previousTodos,
-          items: previousTodos.items.map((todo) =>
+      queryClient.setQueriesData<TodoListResponse>({ queryKey }, (previous) => {
+        if (!previous) return previous;
+        return {
+          ...previous,
+          items: previous.items.map((todo) =>
             todo.id === id ? { ...todo, ...data } : todo
           ),
-        });
-      }
+        };
+      });
 
       return { previousTodos };
     },
@@ -96,18 +104,19 @@ export function useUpdateTodo() {
       toast.error("Failed to update todo");
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 }
 
 export function useDeleteTodo() {
+  const { data: user } = useCurrentUser();
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
       await api.delete(`/todos/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      queryClient.invalidateQueries({ queryKey: ["todos", user?.id] });
       toast.success("Todo deleted successfully!");
     },
     onError: () => {

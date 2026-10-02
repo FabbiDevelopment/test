@@ -1,5 +1,27 @@
 # React + TypeScript + Vite
 
+## Session isolation tests
+
+The browser tests mock account-specific API responses to verify frontend cache
+isolation independently of backend Redis. They cover account switching,
+registration, failed logout, late responses, and todo cache updates.
+
+```bash
+npm ci
+npx playwright install chromium
+npm run test:e2e
+```
+
+On Windows, an installed Microsoft Edge can be used without downloading Chromium:
+
+```powershell
+$env:PLAYWRIGHT_CHANNEL = "msedge"
+npm run test:e2e
+```
+
+Playwright starts the frontend on port 5179. For a visible browser, run
+`npm run test:e2e -- --headed`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

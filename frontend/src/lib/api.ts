@@ -1,4 +1,5 @@
 import axios from "axios";
+import { clearSession } from "./session";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -26,10 +27,14 @@ api.interceptors.request.use(
 // Response interceptor: handle 401
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
+  async (error) => {
+    const token = localStorage.getItem("access_token");
+    if (
+      error.response?.status === 401 &&
+      token &&
+      error.config?.headers?.Authorization === `Bearer ${token}`
+    ) {
+      await clearSession();
       window.location.href = "/login";
     }
     return Promise.reject(error);

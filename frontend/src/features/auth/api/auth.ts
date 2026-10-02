@@ -1,5 +1,6 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { clearSession, getSessionVersion, startSession } from "@/lib/session";
 
 interface LoginRequest {
   email: string;
@@ -23,10 +24,7 @@ export function useLogin() {
       const response = await api.post("/auth/login", data);
       return response.data;
     },
-    onSuccess: (data) => {
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("refresh_token", data.refresh_token);
-    },
+    onSuccess: (data) => startSession(data.access_token, data.refresh_token),
   });
 }
 
@@ -36,10 +34,7 @@ export function useRegister() {
       const response = await api.post("/auth/register", data);
       return response.data;
     },
-    onSuccess: (data) => {
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("refresh_token", data.refresh_token);
-    },
+    onSuccess: (data) => startSession(data.access_token, data.refresh_token),
   });
 }
 
@@ -48,10 +43,7 @@ export function useLogout() {
     mutationFn: async () => {
       await api.post("/auth/logout");
     },
-    onSuccess: () => {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-    },
+    onSettled: clearSession,
   });
 }
 
@@ -61,7 +53,16 @@ interface UserResponse {
   created_at: string;
 }
 
-export async function fetchCurrentUser(): Promise<UserResponse> {
-  const response = await api.get("/auth/me");
+export async function fetchCurrentUser(signal?: AbortSignal): Promise<UserResponse> {
+  const response = await api.get("/auth/me", { signal });
   return response.data;
+}
+
+export function useCurrentUser() {
+  return useQuery({
+    queryKey: ["currentUser", getSessionVersion()],
+    queryFn: ({ signal }) => fetchCurrentUser(signal),
+    enabled: !!localStorage.getItem("access_token"),
+    retry: false,
+  });
 }

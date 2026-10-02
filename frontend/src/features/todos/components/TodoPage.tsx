@@ -11,7 +11,7 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 export function TodoPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const { data, isLoading, error } = useTodos();
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading: isUserLoading, error: userError } = useAuth();
 
   return (
     <div className="min-h-screen bg-muted/40">
@@ -43,13 +43,13 @@ export function TodoPage() {
           </CardHeader>
           <Separator />
           <CardContent className="pt-4">
-            {isLoading && (
+            {(isLoading || isUserLoading) && (
               <div className="text-center py-12 text-muted-foreground">
                 Loading todos...
               </div>
             )}
 
-            {error && (
+            {(error || userError) && (
               <div className="text-center py-12 text-destructive">
                 Failed to load todos. Please try again.
               </div>

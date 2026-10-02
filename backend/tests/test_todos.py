@@ -1,5 +1,6 @@
 """Todo tests."""
 
+import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -231,3 +232,55 @@ async def test_mutation_is_committed_before_cache_refill(
     cached = await client.get("/api/v1/todos", headers=headers)
     assert cached.status_code == 200
     assert {item["title"] for item in cached.json()["items"]} == expected_titles
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["GET", "PUT", "DELETE"])
+async def test_todo_access_requires_ownership(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, method: str
+):
+    """Other users cannot access or mutate a todo, while its owner still can."""
+    owner_token = await get_auth_token(client, "owner@example.com")
+    other_token = await get_auth_token(client, "other@example.com")
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+    created = await client.post(
+        "/api/v1/todos",
+        json={"title": "Private todo", "description": "Private description"},
+        headers=owner_headers,
+    )
+    assert created.status_code == 201
+    original = created.json()
+    url = f"/api/v1/todos/{original['id']}"
+
+    redis = MagicMock()
+    redis.delete = AsyncMock()
+    monkeypatch.setitem(app.dependency_overrides, get_redis, lambda: redis)
+    request_data = {"json": {"title": "Changed"}} if method == "PUT" else {}
+
+    denied = await client.request(method, url, headers=other_headers, **request_data)
+    assert denied.status_code == 404
+    assert denied.json() == {"detail": "Todo not found"}
+    missing = await client.request(
+        method, f"/api/v1/todos/{uuid.uuid4()}", headers=other_headers, **request_data
+    )
+    assert missing.status_code == 404
+    assert missing.json() == denied.json()
+    redis.delete.assert_not_awaited()
+
+    # An independent request confirms failed mutations left the owner's data intact.
+    unchanged = await client.get(url, headers=owner_headers)
+    assert unchanged.status_code == 200
+    for field in ("id", "user_id", "title", "description", "completed", "updated_at"):
+        assert unchanged.json()[field] == original[field]
+
+    # The authorization check must still permit each operation for the owner.
+    allowed = await client.request(method, url, headers=owner_headers, **request_data)
+    assert allowed.status_code == (204 if method == "DELETE" else 200)
+    if method == "PUT":
+        persisted = await client.get(url, headers=owner_headers)
+        assert persisted.status_code == 200
+        assert persisted.json()["title"] == "Changed"
+    elif method == "DELETE":
+        deleted = await client.get(url, headers=owner_headers)
+        assert deleted.status_code == 404

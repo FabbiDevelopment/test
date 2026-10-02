@@ -54,6 +54,7 @@ Add `todo_shares` (PostgreSQL):
 | `updated_at` | TIMESTAMPTZ | Not null, UTC; update on role change |
 
 - Unique constraint: (`todo_id`, `shared_with_user_id`) — at most one grant per recipient per todo.
+- Existing `users.email` is not unique case-insensitively. Add a unique index on `lower(btrim(email))` and use the same normalization during registration and recipient lookup. Before applying it, detect and resolve any existing duplicate emails.
 - Index: (`shared_with_user_id`, `created_at`, `todo_id`) for shared-todo listing. The unique constraint also indexes (`todo_id`, `shared_with_user_id`); do not add a duplicate index.
 - No owner column is stored; resolve ownership from `todos.user_id`.
 - Deleting a todo or recipient account cascades to their grants. Owner-account deletion must follow the existing todo FK policy and remove owned todos and grants consistently.

@@ -34,3 +34,4 @@ Thumbs.db
 
 docs/*
 !docs/TEST_PLAN.md
+!docs/TODO_SHARING_SPEC.md

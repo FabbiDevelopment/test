@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:real": "playwright test --project=backend-e2e",
+    "test:e2e:mock": "playwright test --project=session-cache"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

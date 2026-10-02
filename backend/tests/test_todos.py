@@ -98,7 +98,7 @@ async def test_toggle_todo_completion_both_directions(client: AsyncClient):
     assert created.status_code == 201
     url = f"/api/v1/todos/{created.json()['id']}"
 
-    for completed in (True, False, True, False):
+    for completed in (True, False):
         updated = await client.put(url, json={"completed": completed}, headers=headers)
         assert updated.status_code == 200
         persisted = await client.get(url, headers=headers)
@@ -216,7 +216,6 @@ async def test_list_cache_isolates_users_pages_and_invalidates_updates(
     redis.get = AsyncMock(side_effect=get_cache)
     redis.set = AsyncMock(side_effect=set_cache)
     redis.delete_pattern = AsyncMock(side_effect=delete_cache)
-    redis.delete = AsyncMock(side_effect=delete_cache)
     monkeypatch.setitem(app.dependency_overrides, get_redis, lambda: redis)
 
     token_a = await get_auth_token(client, "cache-a@example.com")

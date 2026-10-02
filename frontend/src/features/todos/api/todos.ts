@@ -84,9 +84,6 @@ export function useUpdateTodo() {
       // Cancel outgoing queries
       await queryClient.cancelQueries({ queryKey });
 
-      // Snapshot previous value
-      const previousTodos = queryClient.getQueriesData<TodoListResponse>({ queryKey });
-
       // Optimistically update
       queryClient.setQueriesData<TodoListResponse>({ queryKey }, (previous) => {
         if (!previous) return previous;
@@ -97,8 +94,6 @@ export function useUpdateTodo() {
           ),
         };
       });
-
-      return { previousTodos };
     },
     onError: () => {
       toast.error("Failed to update todo");

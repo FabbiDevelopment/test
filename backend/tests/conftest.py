@@ -7,8 +7,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-# Use SQLite for tests before app modules initialize their default engine.
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+# Use fast in-container SQLite for tests to prevent Windows bind-mount file locking issues
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite+aiosqlite:////tmp/test.db")
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from app.api.deps import get_redis
@@ -25,15 +25,9 @@ test_session_maker = async_sessionmaker(
 )
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
 @pytest.fixture(autouse=True)
 async def setup_db():
+    _shared_redis_mock._store.clear()
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -51,12 +45,34 @@ async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+class InMemoryRedisMock:
+    def __init__(self):
+        self._store = {}
+
+    async def get(self, key: str):
+        return self._store.get(key)
+
+    async def set(self, key: str, value: str, ex: int | None = None):
+        self._store[key] = value
+
+    async def delete(self, key: str):
+        self._store.pop(key, None)
+
+    async def delete_pattern(self, pattern: str):
+        import fnmatch
+        keys_to_del = [k for k in list(self._store.keys()) if fnmatch.fnmatch(k, pattern)]
+        for k in keys_to_del:
+            self._store.pop(k, None)
+
+    async def exists(self, key: str):
+        return key in self._store
+
+
+_shared_redis_mock = InMemoryRedisMock()
+
+
 def override_get_redis():
-    mock_redis = MagicMock()
-    mock_redis.get = AsyncMock(return_value=None)
-    mock_redis.set = AsyncMock()
-    mock_redis.delete = AsyncMock()
-    return mock_redis
+    return _shared_redis_mock
 
 
 app.dependency_overrides[get_db] = override_get_db

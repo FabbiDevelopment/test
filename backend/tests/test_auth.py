@@ -75,3 +75,22 @@ async def test_logout(client: AsyncClient):
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Successfully logged out"
+
+
+@pytest.mark.asyncio
+async def test_expired_jwt_rejection(client: AsyncClient):
+    """Test that an expired token is rejected."""
+    from app.core.security import create_access_token
+    from datetime import timedelta
+    
+    token = create_access_token(
+        data={"sub": "00000000-0000-0000-0000-000000000001"},
+        expires_delta=timedelta(minutes=-1) # Expired 1 minute ago
+    )
+    
+    response = await client.get(
+        "/api/v1/todos",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 401
+    assert "Invalid authentication token" in response.json()["detail"]

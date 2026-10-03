@@ -120,3 +120,51 @@ async def test_get_single_todo(client: AsyncClient):
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Single Todo"
+
+
+@pytest.mark.asyncio
+async def test_todo_data_isolation(client: AsyncClient):
+    """Test that User A cannot read/update User B's todo."""
+    token_a = await get_auth_token(client, "user_a@example.com")
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "User A Todo"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    todo_id = create_response.json()["id"]
+
+    token_b = await get_auth_token(client, "user_b@example.com")
+    
+    read_response = await client.get(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert read_response.status_code in (403, 404)
+    
+    update_response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Hacked Title"},
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert update_response.status_code in (403, 404)
+
+
+@pytest.mark.asyncio
+async def test_todo_boolean_toggle(client: AsyncClient):
+    """Test toggling completed status from true to false."""
+    token = await get_auth_token(client, "toggle@example.com")
+    
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Toggle Me", "completed": True},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    todo_id = create_response.json()["id"]
+    
+    update_response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"completed": False},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["completed"] is False

@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
+import type { Tag } from "./tags";
 
 export interface Todo {
   id: string;
@@ -11,6 +12,7 @@ export interface Todo {
   user_id: string;
   created_at: string;
   updated_at: string;
+  tags: Tag[];
 }
 
 interface TodoListResponse {
@@ -32,13 +34,30 @@ interface UpdateTodoRequest {
 }
 
 
-export function useTodos(page: number = 1, size: number = 10000) {
+export interface TodoFilters {
+  page?: number;
+  size?: number;
+  status?: boolean | null;
+  tag_id?: string | null;
+  keyword?: string | null;
+  date_from?: string | null;
+  date_to?: string | null;
+}
+
+export function useTodos(filters: TodoFilters = {}) {
+  const { page = 1, size = 10000, status, tag_id, keyword, date_from, date_to } = filters;
+
   return useQuery({
-    queryKey: ["todos"],
+    queryKey: ["todos", { page, size, status, tag_id, keyword, date_from, date_to }],
     queryFn: async (): Promise<TodoListResponse> => {
-      const response = await api.get("/todos", {
-        params: { page, size },
-      });
+      const params: Record<string, any> = { page, size };
+      if (status !== undefined && status !== null) params.status = status;
+      if (tag_id) params.tag_id = tag_id;
+      if (keyword) params.keyword = keyword;
+      if (date_from) params.date_from = date_from;
+      if (date_to) params.date_to = date_to;
+
+      const response = await api.get("/todos", { params });
       return response.data;
     },
   });
@@ -92,7 +111,10 @@ export function useUpdateTodo() {
 
       return { previousTodos };
     },
-    onError: () => {
+    onError: (_err, _variables, context) => {
+      if (context?.previousTodos) {
+        queryClient.setQueryData(["todos"], context.previousTodos);
+      }
       toast.error("Failed to update todo");
     },
     onSettled: () => {
@@ -128,4 +150,51 @@ export function useToggleTodo() {
       });
     },
   };
+}
+
+export function useBulkUpdateTodoStatus() {
+  return useMutation({
+    mutationFn: async ({ todo_ids, completed }: { todo_ids: string[], completed: boolean }) => {
+      await api.patch("/todos/bulk-status", { todo_ids, completed });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      toast.success("Todos updated successfully!");
+    },
+    onError: () => {
+      toast.error("Failed to update todos");
+    },
+  });
+}
+
+export function useAttachTagToTodo() {
+  return useMutation({
+    mutationFn: async ({ todo_id, tag_id }: { todo_id: string; tag_id: string }): Promise<Todo> => {
+      const response = await api.post(`/todos/${todo_id}/tags`, { tag_id });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      toast.success("Tag attached successfully!");
+    },
+    onError: () => {
+      toast.error("Failed to attach tag");
+    },
+  });
+}
+
+export function useDetachTagFromTodo() {
+  return useMutation({
+    mutationFn: async ({ todo_id, tag_id }: { todo_id: string; tag_id: string }): Promise<Todo> => {
+      const response = await api.delete(`/todos/${todo_id}/tags/${tag_id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      toast.success("Tag detached successfully!");
+    },
+    onError: () => {
+      toast.error("Failed to detach tag");
+    },
+  });
 }

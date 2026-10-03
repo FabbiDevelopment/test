@@ -4,13 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useTodos } from "../api/todos";
+import type { TodoFilters } from "../api/todos";
 import { TodoList } from "./TodoList";
 import { TodoForm } from "./TodoForm";
+import { TodoFilterBar } from "./TodoFilterBar";
+import { TagManagementModal } from "./TagManagementModal";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
 export function TodoPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const { data, isLoading, error } = useTodos();
+  const [showTagManagement, setShowTagManagement] = useState(false);
+  const [filters, setFilters] = useState<TodoFilters>({ page: 1, size: 50 });
+  const { data, isLoading, error } = useTodos(filters);
   const { user, logout } = useAuth();
 
   return (
@@ -34,7 +39,7 @@ export function TodoPage() {
       {/* Main content */}
       <main className="max-w-3xl mx-auto px-4 py-8">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
             <CardTitle className="text-lg">My Todos</CardTitle>
             <Button size="sm" onClick={() => setShowCreateForm(true)}>
               <Plus className="h-4 w-4 mr-1" />
@@ -43,6 +48,12 @@ export function TodoPage() {
           </CardHeader>
           <Separator />
           <CardContent className="pt-4">
+            <TodoFilterBar 
+              filters={filters}
+              onChange={setFilters}
+              onOpenTags={() => setShowTagManagement(true)}
+            />
+
             {isLoading && (
               <div className="text-center py-12 text-muted-foreground">
                 Loading todos...
@@ -71,6 +82,11 @@ export function TodoPage() {
         mode="create"
         open={showCreateForm}
         onClose={() => setShowCreateForm(false)}
+      />
+
+      <TagManagementModal
+        open={showTagManagement}
+        onClose={() => setShowTagManagement(false)}
       />
     </div>
   );

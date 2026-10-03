@@ -4,12 +4,12 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = (
-        "postgresql+asyncpg://fabbi:fabbi_secret@localhost:5432/postgres"
+        "postgresql+asyncpg://fabbi:fabbi_secret@localhost:5434/postgres"
     )
     DB_ECHO: bool = True
 
     # Redis
-    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_URL: str = "redis://:redis_secret@localhost:6379/0"
 
     # JWT
     JWT_SECRET: str = "super-secret-key-change-in-production"
@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"
 
 
 settings = Settings()

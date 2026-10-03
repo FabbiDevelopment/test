@@ -1,7 +1,8 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+# Use clean install for reliable builds
+RUN npm ci
 COPY . .
 RUN npm run build
 
@@ -9,5 +10,7 @@ FROM node:20-alpine
 WORKDIR /app
 RUN npm install -g serve
 COPY --from=build /app/dist ./dist
+# Security: run as non-root user
+USER node
 EXPOSE 3000
 CMD ["serve", "-s", "dist", "-l", "3000"]

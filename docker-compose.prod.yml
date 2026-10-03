@@ -1,0 +1,18 @@
+services:
+  postgres:
+    restart: always
+    ports: [] # Do not expose DB directly in production
+
+  redis:
+    restart: always
+    ports: [] # Do not expose Redis directly in production
+
+  backend:
+    restart: always
+    ports:
+      - "127.0.0.1:8000:8000" # Bind only to localhost or behind a reverse proxy
+
+  frontend:
+    restart: always
+    ports:
+      - "80:3000" # Expose frontend on standard port 80

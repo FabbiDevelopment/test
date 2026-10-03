@@ -37,11 +37,11 @@ export function TodoList({ todos }: TodoListProps) {
   return (
     <>
       <div className="space-y-2">
-        {todos.map((todo, index) => (
+        {todos.map((todo) => (
           <TodoItem
-            key={index}
+            key={todo.id}
             todo={todo}
-            index={index}
+            index={0}
             onToggle={handleToggle}
             onEdit={handleEdit}
             onDelete={handleDelete}

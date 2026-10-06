@@ -1,8 +1,10 @@
 """Auth tests."""
 
+from datetime import timedelta
 import pytest
 from httpx import AsyncClient
 
+from app.core.security import create_access_token
 
 @pytest.mark.asyncio
 async def test_register_success(client: AsyncClient):
@@ -75,3 +77,34 @@ async def test_logout(client: AsyncClient):
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Successfully logged out"
+
+@pytest.mark.asyncio
+async def test_expired_token_rejected(client: AsyncClient):
+    """Test that an expired access token is rejected with 401."""
+    # 1. Register a valid user and get user id
+    reg_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "expired@example.com", "password": "password123"},
+    )
+    token = reg_response.json()["access_token"]
+    me_response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    user_id = me_response.json()["id"]
+
+    # 2. Create an access token for this user that expired 10 minutes ago
+    expired_token = create_access_token(
+        data={"sub": user_id},
+        expires_delta=timedelta(minutes=-10),
+    )
+
+    # 3. Call protected endpoint with the expired token
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
+
+    # 4. Assert request is rejected with 401 Unauthorized
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid authentication token"

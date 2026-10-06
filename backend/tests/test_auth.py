@@ -108,3 +108,24 @@ async def test_expired_token_rejected(client: AsyncClient):
     # 4. Assert request is rejected with 401 Unauthorized
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid authentication token"
+    
+@pytest.mark.asyncio
+async def test_refresh_token_cannot_access_protected_endpoints(client: AsyncClient):
+    """Test that refresh token is rejected when used to access protected endpoints."""
+    # 1. Register a user to get tokens
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "tokentype@example.com", "password": "password123"},
+    )
+    assert response.status_code == 201
+    refresh_token = response.json()["refresh_token"]
+
+    # 2. Attempt to call protected /me endpoint with refresh token
+    me_response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {refresh_token}"},
+    )
+
+    # 3. Assert request is rejected with 401 and invalid token type
+    assert me_response.status_code == 401
+    assert me_response.json()["detail"] == "Invalid token type"

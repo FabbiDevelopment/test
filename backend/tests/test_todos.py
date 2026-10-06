@@ -193,3 +193,51 @@ async def test_partial_update_preserves_description(client: AsyncClient):
     )
     assert get_response.status_code == 200
     assert get_response.json()["description"] == "Original Description"
+
+@pytest.mark.asyncio
+async def test_cross_user_isolation(client: AsyncClient):
+    """Test that User B cannot view, update, or delete User A's todo."""
+    # 1. Register and get token for User A
+    token_a = await get_auth_token(client, "user_a@example.com")
+
+    # 2. Register and get token for User B
+    token_b = await get_auth_token(client, "user_b@example.com")
+
+    # 3. User A creates a todo
+    create_res = await client.post(
+        "/api/v1/todos",
+        json={"title": "User A Private Todo"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert create_res.status_code == 201
+    todo_id = create_res.json()["id"]
+
+    # 4. User B attempts to read User A's todo -> 404
+    get_res = await client.get(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert get_res.status_code == 404
+
+    # 5. User B attempts to update User A's todo -> 404
+    put_res = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Hacked Title"},
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert put_res.status_code == 404
+
+    # 6. User B attempts to delete User A's todo -> 404
+    del_res = await client.delete(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert del_res.status_code == 404
+
+    # 7. Verify User A's todo is still safe and intact
+    verify_res = await client.get(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert verify_res.status_code == 200
+    assert verify_res.json()["title"] == "User A Private Todo"

@@ -118,8 +118,10 @@ async def update_existing_todo(
             detail="Todo not found",
         )
 
-    update_data = todo_data.model_dump()
+    # fix
+    update_data = todo_data.model_dump(exclude_unset=True)
 
+    # fix
     if todo_data.completed is not None:
         todo.completed = todo_data.completed
 

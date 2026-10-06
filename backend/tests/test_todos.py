@@ -160,3 +160,36 @@ async def test_toggle_todo_completed_persistence(client: AsyncClient):
     )
     assert get_response.status_code == 200
     assert get_response.json()["completed"] is False
+    
+@pytest.mark.asyncio
+async def test_partial_update_preserves_description(client: AsyncClient):
+    """Test updating title does not erase existing description."""
+    token = await get_auth_token(client, "partial@example.com")
+
+    # 1. Create a todo with title and description
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Original Title", "description": "Original Description"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert create_response.status_code == 201
+    todo_id = create_response.json()["id"]
+
+    # 2. Update title only (omit description)
+    update_response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Updated Title Only"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert update_response.status_code == 200
+    updated_data = update_response.json()
+    assert updated_data["title"] == "Updated Title Only"
+    assert updated_data["description"] == "Original Description"
+
+    # 3. Verify description still persists in database
+    get_response = await client.get(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert get_response.status_code == 200
+    assert get_response.json()["description"] == "Original Description"

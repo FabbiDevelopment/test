@@ -120,7 +120,7 @@ async def update_existing_todo(
 
     update_data = todo_data.model_dump()
 
-    if todo_data.completed:
+    if todo_data.completed is not None:
         todo.completed = todo_data.completed
 
     # Apply other updates

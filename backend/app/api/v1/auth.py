@@ -40,8 +40,6 @@ async def register(
             detail="Email already registered",
         )
 
-    user = await create_user(db, user_data)
-
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
 

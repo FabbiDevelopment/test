@@ -120,3 +120,43 @@ async def test_get_single_todo(client: AsyncClient):
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Single Todo"
+
+@pytest.mark.asyncio
+async def test_toggle_todo_completed_persistence(client: AsyncClient):
+    """Test updating completed from true back to false persists correctly."""
+    token = await get_auth_token(client, "toggle@example.com")
+
+    # completed = False
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "Toggle Todo", "description": "Testing toggle"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert create_response.status_code == 201
+    todo_id = create_response.json()["id"]
+    assert create_response.json()["completed"] is False
+
+    # completed = True
+    response_true = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"completed": True},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response_true.status_code == 200
+    assert response_true.json()["completed"] is True
+
+    # completed = False
+    response_false = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"completed": False},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response_false.status_code == 200
+    assert response_false.json()["completed"] is False
+
+    get_response = await client.get(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert get_response.status_code == 200
+    assert get_response.json()["completed"] is False

@@ -129,3 +129,21 @@ async def test_refresh_token_cannot_access_protected_endpoints(client: AsyncClie
     # 3. Assert request is rejected with 401 and invalid token type
     assert me_response.status_code == 401
     assert me_response.json()["detail"] == "Invalid token type"
+    
+@pytest.mark.asyncio
+async def test_register_duplicate_email_rejected(client: AsyncClient):
+    """Test that registering with an existing email is rejected with 400 Bad Request."""
+    # 1. First registration succeeds
+    res1 = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "duplicate@example.com", "password": "password123"},
+    )
+    assert res1.status_code == 201
+
+    # 2. Second registration with the exact same email must fail with 400
+    res2 = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "duplicate@example.com", "password": "different_password"},
+    )
+    assert res2.status_code == 400
+    assert res2.json()["detail"] == "Email already registered"

@@ -92,8 +92,13 @@ export function useUpdateTodo() {
 
       return { previousTodos };
     },
-    onError: () => {
+    // fix
+    onError: (_err, _variables, context) => {
       toast.error("Failed to update todo");
+      // Rollback to previous state if mutation fails
+      if (context?.previousTodos) {
+        queryClient.setQueryData(["todos"], context.previousTodos);
+      }
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["todos"] });

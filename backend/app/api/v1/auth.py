@@ -13,6 +13,7 @@ from app.schemas.user import (
     UserResponse,
 )
 from app.services.auth_service import create_user, get_user_by_email
+from sqlalchemy.exc import IntegrityError
 
 router = APIRouter()
 
@@ -31,8 +32,13 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered",
         )
-
-    user = await create_user(db, user_data)
+    try:
+        user = await create_user(db, user_data)
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered",
+        )
 
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})

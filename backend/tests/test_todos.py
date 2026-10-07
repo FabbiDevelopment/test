@@ -241,3 +241,31 @@ async def test_cross_user_isolation(client: AsyncClient):
     )
     assert verify_res.status_code == 200
     assert verify_res.json()["title"] == "User A Private Todo"
+    
+@pytest.mark.asyncio
+async def test_list_todos_user_email_populated(client: AsyncClient):
+    """Test that list_todos correctly populates user_email without n+1 queries."""
+    email = "nplusone@example.com"
+    token = await get_auth_token(client, email)
+
+    # 1. Create multiple todos
+    for i in range(3):
+        res = await client.post(
+            "/api/v1/todos",
+            json={"title": f"Batch Todo {i}"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert res.status_code == 201
+
+    # 2. Get list of todos
+    response = await client.get(
+        "/api/v1/todos",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) >= 3
+
+    # 3. Verify user_email is correctly populated on every item
+    for item in data["items"]:
+        assert item["user_email"] == email

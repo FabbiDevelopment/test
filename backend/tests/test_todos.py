@@ -2,6 +2,9 @@
 
 import pytest
 from httpx import AsyncClient
+from unittest.mock import AsyncMock, MagicMock
+from app.api.deps import get_redis
+from app.main import app
 
 
 async def get_auth_token(client: AsyncClient, email: str = "todo@example.com") -> str:
@@ -269,3 +272,36 @@ async def test_list_todos_user_email_populated(client: AsyncClient):
     # 3. Verify user_email is correctly populated on every item
     for item in data["items"]:
         assert item["user_email"] == email
+        
+@pytest.mark.asyncio
+async def test_redis_cache_key_user_isolation(client: AsyncClient):
+    """Test that Redis cache keys are isolated between different users."""
+    cache_store = {}
+
+    mock_redis = MagicMock()
+    async def mock_get(key: str):
+        return cache_store.get(key)
+    async def mock_set(key: str, val: str, **kwargs):
+        cache_store[key] = val
+
+    mock_redis.get = AsyncMock(side_effect=mock_get)
+    mock_redis.set = AsyncMock(side_effect=mock_set)
+    app.dependency_overrides[get_redis] = lambda: mock_redis
+
+    token_a = await get_auth_token(client, "cache_user_a@example.com")
+    token_b = await get_auth_token(client, "cache_user_b@example.com")
+
+    # 1. User A creates a todo and fetches list (populating cache)
+    await client.post(
+        "/api/v1/todos",
+        json={"title": "User A Private Cached Todo"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    res_a = await client.get("/api/v1/todos", headers={"Authorization": f"Bearer {token_a}"})
+    assert res_a.status_code == 200
+    assert len(res_a.json()["items"]) == 1
+
+    # 2. User B calls list_todos (must NOT see User A's cached todo)
+    res_b = await client.get("/api/v1/todos", headers={"Authorization": f"Bearer {token_b}"})
+    assert res_b.status_code == 200
+    assert len(res_b.json()["items"]) == 0
